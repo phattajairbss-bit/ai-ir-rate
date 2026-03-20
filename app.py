@@ -30,44 +30,57 @@ html, body, [class*="css"] {
     font-family: 'Segoe UI', 'Roboto', sans-serif;
 }
 
-/* ===== BACKGROUND GREEN ===== */
+/* ===== BACKGROUND PINK ===== */
 .stApp {
-    background: linear-gradient(to right, #d1fae5, #a7f3d0);
+    background: linear-gradient(to right, #ffe6f0, #ffd1e0);
 }
 
-/* ===== HEADER ===== */
+/* ===== HEADER GREEN ===== */
 .header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 10px 40px;
+    background-color: #047857;
+    border-radius: 12px;
 }
 .main-title {
     font-size: 42px;
     font-weight: 800;
-    color: #065f46;
+    color: white;
 }
 .logo {
     height: 50px;
 }
 
-/* ===== STEP ===== */
-.step {
-    font-size: 34px;
-    font-weight: 700;
-    color: #047857;
-    margin-right: 10px;
-}
-.step-title {
-    font-size: 22px;
-    font-weight: 600;
-    color: #064e3b;
-}
+/* ===== STEP GREEN ===== */
 .step-box {
     display: flex;
     align-items: center;
     margin-top: 20px;
     margin-bottom: 10px;
+    background-color: #065f46;
+    padding: 10px 15px;
+    border-radius: 12px;
+}
+.step {
+    font-size: 34px;
+    font-weight: 700;
+    color: white;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+    background-color: #ffffff;
+    color: #065f46;
+    margin-right: 15px;
+}
+.step-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: #e0f2f1;
 }
 
 /* ===== CARD ===== */
@@ -89,7 +102,7 @@ html, body, [class*="css"] {
 # ===== HEADER =====
 st.markdown(f"""
 <div class="header">
-    <div class="main-title">🌍 AI-powered IR rate / CGV</div>
+    <div class="main-title">🌍 AI-powered IR Rate / CGV</div>
     <img src="ais_logo.png" class="logo">
 </div>
 """, unsafe_allow_html=True)
@@ -176,7 +189,7 @@ if st.button("🔁 Rollback Master"):
 # ===== STEP 1 =====
 st.markdown("""
 <div class="step-box">
-    <div class="step">①</div>
+    <div class="step">1</div>
     <div class="step-title">Upload New File</div>
 </div>
 """, unsafe_allow_html=True)
@@ -219,7 +232,7 @@ if file:
         # ===== STEP 2 =====
         st.markdown("""
         <div class="step-box">
-            <div class="step">②</div>
+            <div class="step">2</div>
             <div class="step-title">Download Compare Result</div>
         </div>
         """, unsafe_allow_html=True)
@@ -235,7 +248,7 @@ if file:
     # ===== STEP 3 =====
     st.markdown("""
     <div class="step-box">
-        <div class="step">③</div>
+        <div class="step">3</div>
         <div class="step-title">Save as Master</div>
     </div>
     """, unsafe_allow_html=True)
