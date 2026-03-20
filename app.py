@@ -23,19 +23,23 @@ st.session_state.dark_mode = toggle
 if st.session_state.dark_mode:
     bg = "#0f172a"
     card = "#1e293b"
-    text = "white"
+    text = "#e2e8f0"
 else:
     bg = "#f8fafc"
     card = "white"
     text = "#111827"
 
+# ===== CSS =====
 st.markdown(f"""
 <style>
+
+/* ===== GLOBAL ===== */
 .stApp {{
     background: {bg};
     color: {text};
 }}
 
+/* ===== HEADER ===== */
 .header {{
     padding: 20px;
     border-radius: 12px;
@@ -43,6 +47,7 @@ st.markdown(f"""
     color: white;
 }}
 
+/* ===== CARD ===== */
 .card {{
     background: {card};
     padding: 18px;
@@ -50,6 +55,7 @@ st.markdown(f"""
     margin-top: 15px;
 }}
 
+/* ===== METRIC ===== */
 .metric {{
     padding: 15px;
     border-radius: 10px;
@@ -60,6 +66,32 @@ st.markdown(f"""
 .red {{ background:#dc2626; }}
 .orange {{ background:#f59e0b; }}
 .gray {{ background:#6b7280; }}
+
+/* ===== DATAFRAME FIX (สำคัญ) ===== */
+[data-testid="stDataFrame"] {{
+    background-color: {card} !important;
+    color: {text} !important;
+}}
+
+[data-testid="stDataFrame"] th {{
+    background-color: {card} !important;
+    color: {text} !important;
+}}
+
+[data-testid="stDataFrame"] td {{
+    background-color: {card} !important;
+    color: {text} !important;
+}}
+
+[data-testid="stDataFrame"] td, 
+[data-testid="stDataFrame"] th {{
+    border: 1px solid #334155;
+}}
+
+/* zebra row */
+[data-testid="stDataFrame"] tbody tr:nth-child(even) {{
+    background-color: rgba(255,255,255,0.03);
+}}
 
 </style>
 """, unsafe_allow_html=True)
@@ -238,12 +270,20 @@ if file:
             display = result
 
         def highlight(row):
-            if row["STATUS"] == "CHANGED":
-                return ["background-color:#fee2e2"]*len(row)
-            if row["STATUS"] == "NEW":
-                return ["background-color:#dcfce7"]*len(row)
-            if row["STATUS"] == "REMOVED":
-                return ["background-color:#fef3c7"]*len(row)
+            if st.session_state.dark_mode:
+                if row["STATUS"] == "CHANGED":
+                    return ["background-color:#7f1d1d"]*len(row)
+                if row["STATUS"] == "NEW":
+                    return ["background-color:#14532d"]*len(row)
+                if row["STATUS"] == "REMOVED":
+                    return ["background-color:#78350f"]*len(row)
+            else:
+                if row["STATUS"] == "CHANGED":
+                    return ["background-color:#fee2e2"]*len(row)
+                if row["STATUS"] == "NEW":
+                    return ["background-color:#dcfce7"]*len(row)
+                if row["STATUS"] == "REMOVED":
+                    return ["background-color:#fef3c7"]*len(row)
             return [""]*len(row)
 
         st.dataframe(display.style.apply(highlight, axis=1), use_container_width=True)
