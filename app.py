@@ -127,6 +127,12 @@ def rollback_master():
 def prepare(df, rate_col_name, date=None):
     key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
     df = df.copy()
+    
+    # ตรวจสอบคอลัมน์ RATE
+    if "RATE" not in df.columns:
+        st.error("❌ คอลัมน์ 'RATE' ไม่พบในไฟล์ Excel กรุณาตรวจสอบชื่อคอลัมน์")
+        return None
+    
     df["RATE_NUM"] = pd.to_numeric(df["RATE"], errors="coerce")  # เก็บ numeric สำหรับคำนวณ
     df = df[key_cols + ["RATE_NUM"]].drop_duplicates()
     if date is not None:
@@ -135,20 +141,22 @@ def prepare(df, rate_col_name, date=None):
         df[rate_col_name] = df["RATE_NUM"]
     return df[key_cols + [rate_col_name, "RATE_NUM"]]
 
-def compare(df_old, df_new):
+def compare(df_master, df_new):
     key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
-    df = pd.merge(df_old, df_new, on=key_cols, how="outer", suffixes=('_OLD', '_NEW'))
+    df = pd.merge(df_master, df_new, on=key_cols, how="outer", suffixes=('_MASTER', '_NEW'))
+    
     def get_status(row):
-        if pd.isna(row["RATE_NUM_OLD"]):
+        if pd.isna(row["RATE_NUM_MASTER"]):
             return "NEW"
         elif pd.isna(row["RATE_NUM_NEW"]):
             return "REMOVED"
-        elif row["RATE_NUM_OLD"] != row["RATE_NUM_NEW"]:
+        elif row["RATE_NUM_MASTER"] != row["RATE_NUM_NEW"]:
             return "CHANGED"
         else:
             return "SAME"
+    
     df["STATUS"] = df.apply(get_status, axis=1)
-    df["DIFF"] = df["RATE_NUM_NEW"].fillna(0) - df["RATE_NUM_OLD"].fillna(0)
+    df["DIFF"] = df["RATE_NUM_NEW"].fillna(0) - df["RATE_NUM_MASTER"].fillna(0)
     return df.sort_values(key_cols)
 
 # ===== LOAD MASTER =====
@@ -188,10 +196,12 @@ file = st.file_uploader("", type=["xlsx"])
 if file:
     df_new_raw = pd.read_excel(file)
     df_new = prepare(df_new_raw, "RATE_NEW", date=datetime.now(tz).strftime("%d %b %Y"))
+    if df_new is None:
+        st.stop()
 
     if master_df is not None:
-        df_old = prepare(master_df.rename(columns={"RATE":"RATE_OLD"}), "RATE_OLD", date=master_time)
-        result = compare(df_old, df_new)
+        df_master = prepare(master_df.rename(columns={"RATE":"RATE_MASTER"}), "RATE_MASTER", date=master_time)
+        result = compare(df_master, df_new)
 
         # ===== SUMMARY =====
         st.markdown("### 📊 Summary")
@@ -227,8 +237,7 @@ if file:
 
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            # เอาเฉพาะคอลัมน์ที่ต้องการ export
-            export_cols = ["COUNTRY_NAME","CHARGE_CODE","SERVICE_TYPE","RATE_OLD","RATE_NEW","DIFF","STATUS"]
+            export_cols = ["COUNTRY_NAME","CHARGE_CODE","SERVICE_TYPE","RATE_MASTER","RATE_NEW","DIFF","STATUS"]
             result.to_excel(writer, index=False, columns=export_cols)
         st.download_button("📥 Download Excel", data=output.getvalue(), file_name="rate_compare.xlsx")
 
