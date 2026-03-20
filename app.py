@@ -20,7 +20,6 @@ run_time = datetime.now(tz).strftime("%d %b %Y %H:%M:%S")
 MASTER_FILE = "master_rate.parquet"
 MASTER_META = "master_meta.txt"
 BACKUP_FOLDER = "master_backup"
-
 os.makedirs(BACKUP_FOLDER, exist_ok=True)
 
 # ===== CSS =====
@@ -36,6 +35,26 @@ html, body, [class*="css"] {
     font-size: 34px;
     font-weight: 700;
 }
+
+/* STEP UI */
+.step {
+    font-size: 32px;
+    font-weight: 700;
+    color: #4f46e5;
+    margin-right: 10px;
+}
+.step-title {
+    font-size: 20px;
+    font-weight: 600;
+}
+.step-box {
+    display: flex;
+    align-items: center;
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+/* CARD */
 .metric-box {
     background: white;
     padding: 15px;
@@ -67,7 +86,6 @@ def get_master_time():
     return "N/A"
 
 def save_master(df):
-    # backup ก่อน
     if os.path.exists(MASTER_FILE):
         timestamp = datetime.now(tz).strftime("%Y%m%d_%H%M%S")
         shutil.copy(MASTER_FILE, f"{BACKUP_FOLDER}/master_{timestamp}.parquet")
@@ -80,9 +98,8 @@ def rollback_master():
     files = sorted(os.listdir(BACKUP_FOLDER), reverse=True)
     if not files:
         return False
-
-    latest_backup = files[0]
-    shutil.copy(f"{BACKUP_FOLDER}/{latest_backup}", MASTER_FILE)
+    latest = files[0]
+    shutil.copy(f"{BACKUP_FOLDER}/{latest}", MASTER_FILE)
     return True
 
 def prepare(df, rate_col_name):
@@ -110,17 +127,12 @@ def compare(df_old, df_new):
     df["DIFF"] = df["RATE_NEW"] - df["RATE_OLD"]
     return df.sort_values(key_cols)
 
-# ===== SIDEBAR =====
-st.sidebar.header("⚙️ Control Panel")
-file = st.sidebar.file_uploader("Upload New File", type=["xlsx"])
-show_only_diff = st.sidebar.checkbox("Show Differences Only", value=True)
-
 # ===== LOAD MASTER =====
 master_df = load_master()
 master_time = get_master_time()
 
 st.markdown(f"""
-<div style="font-size:14px; color:gray; margin-bottom:10px;">
+<div style="font-size:14px; color:gray;">
 💾 Master Last Updated: <b>{master_time}</b>
 </div>
 """, unsafe_allow_html=True)
@@ -132,14 +144,21 @@ if master_df is not None:
         st.dataframe(master_df, use_container_width=True)
 
 # ===== ROLLBACK =====
-col_rb1, col_rb2 = st.columns([1,5])
-with col_rb1:
-    if st.button("🔁 Rollback Master"):
-        success = rollback_master()
-        if success:
-            st.success("✅ Rolled back to previous version")
-        else:
-            st.warning("⚠️ No backup available")
+if st.button("🔁 Rollback Master"):
+    if rollback_master():
+        st.success("✅ Rolled back to previous version")
+    else:
+        st.warning("⚠️ No backup available")
+
+# ===== STEP 1 =====
+st.markdown("""
+<div class="step-box">
+    <div class="step">①</div>
+    <div class="step-title">Upload New File</div>
+</div>
+""", unsafe_allow_html=True)
+
+file = st.file_uploader("", type=["xlsx"])
 
 # ===== MAIN =====
 if file:
@@ -159,45 +178,48 @@ if file:
         col3.markdown(f'<div class="metric-box">🟠 REMOVED<br><h2>{(result["STATUS"]=="REMOVED").sum()}</h2></div>', unsafe_allow_html=True)
         col4.markdown(f'<div class="metric-box">⚪ SAME<br><h2>{(result["STATUS"]=="SAME").sum()}</h2></div>', unsafe_allow_html=True)
 
-        # ===== FILTER =====
-        if show_only_diff:
+        if st.checkbox("Show Differences Only", value=True):
             result_display = result[result["STATUS"] != "SAME"]
         else:
             result_display = result
 
         st.markdown("### 📋 Compare Result")
 
-        def highlight_status(row):
+        def highlight(row):
             if row["STATUS"] == "CHANGED":
-                return ["background-color: #ffe6e6"] * len(row)
+                return ["background-color: #ffe6e6"]*len(row)
             elif row["STATUS"] == "NEW":
-                return ["background-color: #e6ffe6"] * len(row)
+                return ["background-color: #e6ffe6"]*len(row)
             elif row["STATUS"] == "REMOVED":
-                return ["background-color: #fff3e6"] * len(row)
-            else:
-                return [""] * len(row)
+                return ["background-color: #fff3e6"]*len(row)
+            return [""]*len(row)
 
-        st.dataframe(
-            result_display.style.apply(highlight_status, axis=1),
-            use_container_width=True
-        )
+        st.dataframe(result_display.style.apply(highlight, axis=1), use_container_width=True)
 
-        # ===== DOWNLOAD =====
+        # ===== STEP 2 =====
+        st.markdown("""
+        <div class="step-box">
+            <div class="step">②</div>
+            <div class="step-title">Download Compare Result</div>
+        </div>
+        """, unsafe_allow_html=True)
+
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            result.to_excel(writer, index=False, sheet_name="ALL")
-            result[result["STATUS"] != "SAME"].to_excel(writer, index=False, sheet_name="DIFF")
-
-        st.download_button(
-            "📥 Download Excel",
-            data=output.getvalue(),
-            file_name="rate_compare.xlsx"
-        )
+            result.to_excel(writer, index=False)
+        st.download_button("📥 Download Excel", data=output.getvalue(), file_name="rate_compare.xlsx")
 
     else:
         st.info("📌 First upload → Save as Master")
 
-    # ===== SAVE MASTER =====
+    # ===== STEP 3 =====
+    st.markdown("""
+    <div class="step-box">
+        <div class="step">③</div>
+        <div class="step-title">Save as Master</div>
+    </div>
+    """, unsafe_allow_html=True)
+
     if st.button("💾 Save as Master"):
         master_save = df_new.rename(columns={"RATE_NEW": "RATE"})
         save_master(master_save)
