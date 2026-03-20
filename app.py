@@ -11,25 +11,15 @@ st.title("🔥 AIS IR Rate (HTML Scrape Mode)")
 # ======================================
 # CONFIG
 # ======================================
-# กำหนดประเทศและแพลนที่ต้องการ scrape
 countries = ["japan", "thailand", "singapore"]
 plans = ["postpaid", "prepaid"]
-
-# Mapping column กับ charge code เดิม
-charge_mapping = {
-    "Local": ("400001021", "C_IR_MOC_VISIT"),
-    "Call Thai": ("400001019", "C_IR_MOC_THAI"),
-    "Global": ("400001020", "C_IR_MOC_3RD"),
-    "Receiving": ("400001028", "C_IR_MTC"),
-    "SMS": ("400001029", "C_IR_SMS_MO_THAI")
-}
 
 # ======================================
 # FUNCTION: Scrape HTML จากเว็บ AIS
 # ======================================
 def scrape_ais_html(country, plan):
     """
-    ดึง IR Rate จากหน้าเว็บ AIS โดยตรง
+    ดึง IR Rate จากหน้าเว็บ AIS
     fallback ใช้ html5lib ถ้า lxml ไม่ติดตั้ง
     """
     url = f"https://www.ais.th/en/consumers/package/international/roaming/rate/{country}/{plan}/all"
@@ -38,20 +28,16 @@ def scrape_ais_html(country, plan):
         if res.status_code != 200:
             return {"error": f"status {res.status_code}"}
 
-        # พยายามใช้ parser lxml ก่อน
         try:
             tables = pd.read_html(res.text, flavor='lxml')
         except ImportError:
-            # fallback ไป html5lib
             tables = pd.read_html(res.text, flavor='html5lib')
 
         if not tables:
             return {"error": "No tables found"}
 
-        # สมมติ table แรกเป็นราคาหลัก
+        # Table แรกเป็นราคาหลัก
         df_table = tables[0]
-
-        # เพิ่ม info country + plan
         df_table["COUNTRY_NAME"] = country.upper()
         df_table["SERVICE_TYPE"] = plan
 
@@ -66,17 +52,23 @@ def scrape_ais_html(country, plan):
 def transform_df(df_table):
     final_rows = []
     for _, row in df_table.iterrows():
-        for col, (code, name) in charge_mapping.items():
-            if col in row and pd.notna(row[col]):
-                final_rows.append({
-                    "PROMOTION_TYPE": "normal",
-                    "SERVICE_TYPE": row["SERVICE_TYPE"],
-                    "CHARGE_CODE": code,
-                    "CHARGE_CODE_NAME": name,
-                    "RATE": row[col],
-                    "COUNTRY_NAME": row["COUNTRY_NAME"],
-                    "USER_DATE": datetime.now()
-                })
+        for col in df_table.columns:
+            if col in ["COUNTRY_NAME", "SERVICE_TYPE"]:
+                continue
+            # ตรวจ numeric หรือ float
+            try:
+                rate = float(row[col])
+            except:
+                continue
+            final_rows.append({
+                "PROMOTION_TYPE": "normal",
+                "SERVICE_TYPE": row["SERVICE_TYPE"],
+                "CHARGE_CODE": col.replace(" ", "_").upper(),  # ใช้ชื่อ column เป็น code
+                "CHARGE_CODE_NAME": col,
+                "RATE": rate,
+                "COUNTRY_NAME": row["COUNTRY_NAME"],
+                "USER_DATE": datetime.now()
+            })
     return pd.DataFrame(final_rows)
 
 # ======================================
@@ -95,6 +87,8 @@ if st.button("▶️ Run Scraper Now"):
                 logs.append(f"❌ {c}-{p}: {df_table['error']}")
             else:
                 logs.append(f"✅ {c}-{p}")
+                st.subheader(f"Columns for {c}-{p}")
+                st.write(df_table.columns)  # แสดง column ของ table
                 final_df = transform_df(df_table)
                 all_rows.append(final_df)
 
