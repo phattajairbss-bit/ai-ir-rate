@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 import os
+from datetime import datetime
+import pytz
 
 st.set_page_config(
     page_title="CGV Rate Compare Dashboard",
@@ -9,60 +11,52 @@ st.set_page_config(
     page_icon="🌍"
 )
 
+# ===== TIMEZONE =====
+tz = pytz.timezone("Asia/Bangkok")
+run_time = datetime.now(tz).strftime("%d %b %Y %H:%M:%S")
+
 # ===== CSS =====
 st.markdown("""
 <style>
-
-/* ===== GLOBAL FONT ===== */
 html, body, [class*="css"] {
     font-family: 'Segoe UI', 'Roboto', sans-serif;
     color: #1f2937;
 }
-
-/* ===== BACKGROUND ===== */
 .stApp {
     background: linear-gradient(to right, #f5f7fa, #c3cfe2);
 }
-
-/* ===== HEADER ===== */
 .main-title {
     font-size: 34px;
     font-weight: 700;
 }
-
-/* ===== HEADINGS ===== */
 h1, h2, h3 {
     font-weight: 600 !important;
 }
-
-/* ===== SIDEBAR ===== */
-section[data-testid="stSidebar"] {
-    font-family: 'Segoe UI', 'Roboto', sans-serif;
-}
-
-/* ===== CARD ===== */
 .metric-box {
     background: white;
     padding: 15px;
     border-radius: 12px;
     text-align: center;
     box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
-    font-weight: 500;
 }
-
-/* ===== TABLE ===== */
 .dataframe {
     background-color: white;
-    font-family: 'Segoe UI', 'Roboto', sans-serif;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
 # ===== HEADER =====
 st.markdown('<div class="main-title">🌍 CGV Rate Compare Dashboard</div>', unsafe_allow_html=True)
 
+# ===== TIME DISPLAY =====
+st.markdown(f"""
+<div style="font-size:14px; color:gray;">
+🕒 Last Run: <b>{run_time}</b>
+</div>
+""", unsafe_allow_html=True)
+
 MASTER_FILE = "master_rate.parquet"
+MASTER_META = "master_meta.txt"
 
 # ===== FUNCTIONS =====
 def load_master():
@@ -70,8 +64,16 @@ def load_master():
         return pd.read_parquet(MASTER_FILE)
     return None
 
+def get_master_time():
+    if os.path.exists(MASTER_META):
+        with open(MASTER_META, "r") as f:
+            return f.read()
+    return "N/A"
+
 def save_master(df):
     df.to_parquet(MASTER_FILE)
+    with open(MASTER_META, "w") as f:
+        f.write(datetime.now(tz).strftime("%d %b %Y %H:%M:%S"))
 
 def prepare(df, rate_col_name):
     key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
@@ -100,12 +102,18 @@ def compare(df_old, df_new):
 
 # ===== SIDEBAR =====
 st.sidebar.header("⚙️ Control Panel")
-
 file = st.sidebar.file_uploader("Upload New File", type=["xlsx"])
 show_only_diff = st.sidebar.checkbox("Show Differences Only", value=True)
 
 # ===== LOAD MASTER =====
 master_df = load_master()
+master_time = get_master_time()
+
+st.markdown(f"""
+<div style="font-size:14px; color:gray; margin-bottom:15px;">
+💾 Master Last Updated: <b>{master_time}</b>
+</div>
+""", unsafe_allow_html=True)
 
 # ===== MAIN =====
 if file:
