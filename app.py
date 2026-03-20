@@ -111,7 +111,7 @@ html, body, [class*="css"] {
 
 <div class="header">
     <div class="main-title">🌍 AI-powered IR Rate / CGV</div>
-    <img id="plane" src="https://media.giphy.com/media/26tPplGWjN0xLybiU/giphy.gif">
+    <img id="plane" src="https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif">
 </div>
 """, unsafe_allow_html=True)
 
