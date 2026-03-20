@@ -11,10 +11,11 @@ st.title("🔥 AIS IR Rate (HTML Scrape Mode)")
 # ======================================
 # CONFIG
 # ======================================
-countries = ["japan", "thailand", "singapore"]  # เพิ่มประเทศตัวอย่าง
+# กำหนดประเทศและแพลนที่ต้องการ scrape
+countries = ["japan", "thailand", "singapore"]
 plans = ["postpaid", "prepaid"]
 
-# Mapping สำหรับแปลงชื่อ column ให้สอดคล้องกับ charge_mapping เดิม
+# Mapping column กับ charge code เดิม
 charge_mapping = {
     "Local": ("400001021", "C_IR_MOC_VISIT"),
     "Call Thai": ("400001019", "C_IR_MOC_THAI"),
@@ -24,11 +25,12 @@ charge_mapping = {
 }
 
 # ======================================
-# FUNCTION: Scrape table จาก HTML
+# FUNCTION: Scrape HTML จากเว็บ AIS
 # ======================================
 def scrape_ais_html(country, plan):
     """
     ดึง IR Rate จากหน้าเว็บ AIS โดยตรง
+    fallback ใช้ html5lib ถ้า lxml ไม่ติดตั้ง
     """
     url = f"https://www.ais.th/en/consumers/package/international/roaming/rate/{country}/{plan}/all"
     try:
@@ -36,8 +38,12 @@ def scrape_ais_html(country, plan):
         if res.status_code != 200:
             return {"error": f"status {res.status_code}"}
 
-        # อ่านตาราง HTML ทั้งหมด
-        tables = pd.read_html(res.text)
+        # พยายามใช้ parser lxml ก่อน
+        try:
+            tables = pd.read_html(res.text, flavor='lxml')
+        except ImportError:
+            # fallback ไป html5lib
+            tables = pd.read_html(res.text, flavor='html5lib')
 
         if not tables:
             return {"error": "No tables found"}
@@ -55,7 +61,7 @@ def scrape_ais_html(country, plan):
         return {"error": str(e)}
 
 # ======================================
-# FUNCTION: Transform table เป็นรูปแบบ final
+# FUNCTION: Transform table เป็น final DataFrame
 # ======================================
 def transform_df(df_table):
     final_rows = []
