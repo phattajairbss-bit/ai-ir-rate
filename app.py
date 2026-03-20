@@ -4,25 +4,52 @@ from io import BytesIO
 import os
 
 st.set_page_config(
-    page_title="Rate Compare Tool",
+    page_title="CGV Rate Compare Dashboard",
     layout="wide",
     page_icon="🌍"
 )
 
-# ===== CSS =====
+# ===== CSS Dashboard Style =====
 st.markdown("""
 <style>
-.big-title {
-    font-size:28px !important;
-    font-weight:bold;
+/* background */
+.stApp {
+    background: linear-gradient(to right, #f5f7fa, #c3cfe2);
 }
-.status-changed {color:red; font-weight:bold;}
-.status-new {color:green; font-weight:bold;}
-.status-removed {color:orange; font-weight:bold;}
+
+/* header */
+.main-title {
+    font-size: 36px;
+    font-weight: bold;
+    color: #1f2937;
+}
+
+/* card */
+.card {
+    background: white;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+}
+
+/* metric */
+.metric-box {
+    background: white;
+    padding: 15px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
+}
+
+/* table */
+.dataframe {
+    background-color: white;
+}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<p class="big-title">🌍 Rate Compare Dashboard</p>', unsafe_allow_html=True)
+# ===== HEADER =====
+st.markdown('<div class="main-title">🌍 CGV Rate Compare Dashboard</div>', unsafe_allow_html=True)
 
 MASTER_FILE = "master_rate.parquet"
 
@@ -60,17 +87,14 @@ def compare(df_old, df_new):
     df["DIFF"] = df["RATE_NEW"] - df["RATE_OLD"]
     return df.sort_values(key_cols)
 
+# ===== sidebar =====
+st.sidebar.header("⚙️ Control Panel")
+file = st.sidebar.file_uploader("Upload New File", type=["xlsx"])
+show_only_diff = st.sidebar.checkbox("Show Differences Only", value=True)
+
 # ===== load master =====
 master_df = load_master()
 
-# ===== sidebar =====
-st.sidebar.header("⚙️ Control Panel")
-
-file = st.sidebar.file_uploader("Upload New File", type=["xlsx"])
-
-show_only_diff = st.sidebar.checkbox("Show Differences Only", value=True)
-
-# ===== main =====
 if file:
     df_new_raw = pd.read_excel(file)
     df_new = prepare(df_new_raw, "RATE_NEW")
@@ -79,23 +103,23 @@ if file:
         df_old = master_df.rename(columns={"RATE": "RATE_OLD"})
         result = compare(df_old, df_new)
 
-        # ===== summary =====
-        st.subheader("📊 Summary")
+        # ===== SUMMARY =====
+        st.markdown("### 📊 Summary")
 
         col1, col2, col3, col4 = st.columns(4)
 
-        col1.metric("🟢 NEW", int((result["STATUS"] == "NEW").sum()))
-        col2.metric("🔴 CHANGED", int((result["STATUS"] == "CHANGED").sum()))
-        col3.metric("🟠 REMOVED", int((result["STATUS"] == "REMOVED").sum()))
-        col4.metric("⚪ SAME", int((result["STATUS"] == "SAME").sum()))
+        col1.markdown(f'<div class="metric-box">🟢 NEW<br><h2>{(result["STATUS"]=="NEW").sum()}</h2></div>', unsafe_allow_html=True)
+        col2.markdown(f'<div class="metric-box">🔴 CHANGED<br><h2>{(result["STATUS"]=="CHANGED").sum()}</h2></div>', unsafe_allow_html=True)
+        col3.markdown(f'<div class="metric-box">🟠 REMOVED<br><h2>{(result["STATUS"]=="REMOVED").sum()}</h2></div>', unsafe_allow_html=True)
+        col4.markdown(f'<div class="metric-box">⚪ SAME<br><h2>{(result["STATUS"]=="SAME").sum()}</h2></div>', unsafe_allow_html=True)
 
-        # ===== filter =====
+        # ===== FILTER =====
         if show_only_diff:
             result_display = result[result["STATUS"] != "SAME"]
         else:
             result_display = result
 
-        st.subheader("📋 Result Table")
+        st.markdown("### 📋 Compare Result")
 
         # ===== highlight =====
         def highlight_status(row):
@@ -126,7 +150,7 @@ if file:
         )
 
     else:
-        st.info("📌 First time → Upload and save as master")
+        st.info("📌 First upload → Save as Master")
 
     # ===== save master =====
     if st.button("💾 Save as Master"):
