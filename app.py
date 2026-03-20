@@ -1,8 +1,11 @@
+import streamlit as st
 import pandas as pd
 import requests
 import json
 import re
 from datetime import datetime
+
+st.title("📊 AIS IR Rate Auto Fetch")
 
 # ======================================
 # CONFIG
@@ -23,24 +26,23 @@ charge_mapping = {
     "SMS": ("400001029", "C_IR_SMS_MO_THAI")
 }
 
-
 # ======================================
-# 🔥 CORE FUNCTION (ไม่ใช้ selenium)
+# SCRAPE FUNCTION (ไม่ใช้ selenium)
 # ======================================
 def scrape_ais_rate(country, plan):
 
     url = f"https://www.ais.th/en/consumers/package/international/roaming/rate/{country}/{plan}/all"
     res = requests.get(url)
 
-    # 👉 ดึง JSON จาก Next.js
-    match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', res.text)
+    match = re.search(
+        r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+        res.text
+    )
 
     if not match:
         return None
 
     data = json.loads(match.group(1))
-
-    # 👉 หา rates จาก structure
     text = json.dumps(data)
 
     def extract(label):
@@ -57,52 +59,64 @@ def scrape_ais_rate(country, plan):
         "SMS": extract("SMS")
     }
 
-
 # ======================================
-# LOOP
+# MAIN BUTTON
 # ======================================
-rows = []
+if st.button("🚀 Run ทั้งหมด"):
 
-for c in countries:
-    for p in plans:
-        print(f"Scraping {c} - {p}")
-        try:
-            r = scrape_ais_rate(c, p)
-            if r:
-                rows.append(r)
-        except Exception as e:
-            print("ERROR:", e)
+    rows = []
 
-df = pd.DataFrame(rows)
+    progress = st.progress(0)
 
-# ======================================
-# TRANSFORM (เหมือนเดิม)
-# ======================================
-final_rows = []
+    for i, c in enumerate(countries):
+        for p in plans:
+            try:
+                result = scrape_ais_rate(c, p)
+                if result:
+                    rows.append(result)
+            except Exception as e:
+                st.error(f"Error {c}-{p}: {e}")
 
-for _, row in df.iterrows():
-    for rate_type, (code, name) in charge_mapping.items():
+        progress.progress((i + 1) / len(countries))
 
-        rate = row[rate_type]
+    df = pd.DataFrame(rows)
 
-        if not rate:
-            continue
+    # ======================================
+    # TRANSFORM FORMAT
+    # ======================================
+    final_rows = []
 
-        final_rows.append({
-            "PROMOTION_TYPE": "normal",
-            "SERVICE_TYPE": row["SERVICE_TYPE"],
-            "CHARGE_CODE": code,
-            "CHARGE_CODE_NAME": name,
-            "RATE": rate,
-            "COUNTRY_NAME": row["COUNTRY_NAME"],
-            "USER_DATE": datetime.now()
-        })
+    for _, row in df.iterrows():
+        for rate_type, (code, name) in charge_mapping.items():
 
-final_df = pd.DataFrame(final_rows)
+            rate = row[rate_type]
 
-# ======================================
-# SAVE
-# ======================================
-final_df.to_excel("ais_ir_rate.xlsx", index=False)
+            if not rate:
+                continue
 
-print("DONE ✅", len(final_df))
+            final_rows.append({
+                "PROMOTION_TYPE": "normal",
+                "SERVICE_TYPE": row["SERVICE_TYPE"],
+                "CHARGE_CODE": code,
+                "CHARGE_CODE_NAME": name,
+                "RATE": rate,
+                "COUNTRY_NAME": row["COUNTRY_NAME"],
+                "USER_DATE": datetime.now()
+            })
+
+    final_df = pd.DataFrame(final_rows)
+
+    st.success(f"✅ Done: {len(final_df)} rows")
+    st.dataframe(final_df)
+
+    # ======================================
+    # DOWNLOAD CSV
+    # ======================================
+    csv = final_df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        "📥 Download CSV",
+        data=csv,
+        file_name="ais_ir_rate.csv",
+        mime="text/csv",
+    )
