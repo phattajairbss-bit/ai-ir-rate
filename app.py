@@ -4,6 +4,7 @@ from io import BytesIO
 import os
 from datetime import datetime
 import pytz
+import shutil
 
 st.set_page_config(
     page_title="CGV Rate Compare Dashboard",
@@ -11,16 +12,22 @@ st.set_page_config(
     page_icon="🌍"
 )
 
-# ===== TIMEZONE =====
+# ===== TIME =====
 tz = pytz.timezone("Asia/Bangkok")
 run_time = datetime.now(tz).strftime("%d %b %Y %H:%M:%S")
+
+# ===== PATH =====
+MASTER_FILE = "master_rate.parquet"
+MASTER_META = "master_meta.txt"
+BACKUP_FOLDER = "master_backup"
+
+os.makedirs(BACKUP_FOLDER, exist_ok=True)
 
 # ===== CSS =====
 st.markdown("""
 <style>
 html, body, [class*="css"] {
     font-family: 'Segoe UI', 'Roboto', sans-serif;
-    color: #1f2937;
 }
 .stApp {
     background: linear-gradient(to right, #f5f7fa, #c3cfe2);
@@ -29,9 +36,6 @@ html, body, [class*="css"] {
     font-size: 34px;
     font-weight: 700;
 }
-h1, h2, h3 {
-    font-weight: 600 !important;
-}
 .metric-box {
     background: white;
     padding: 15px;
@@ -39,24 +43,17 @@ h1, h2, h3 {
     text-align: center;
     box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
 }
-.dataframe {
-    background-color: white;
-}
 </style>
 """, unsafe_allow_html=True)
 
 # ===== HEADER =====
 st.markdown('<div class="main-title">🌍 CGV Rate Compare Dashboard</div>', unsafe_allow_html=True)
 
-# ===== TIME DISPLAY =====
 st.markdown(f"""
 <div style="font-size:14px; color:gray;">
 🕒 Last Run: <b>{run_time}</b>
 </div>
 """, unsafe_allow_html=True)
-
-MASTER_FILE = "master_rate.parquet"
-MASTER_META = "master_meta.txt"
 
 # ===== FUNCTIONS =====
 def load_master():
@@ -66,14 +63,27 @@ def load_master():
 
 def get_master_time():
     if os.path.exists(MASTER_META):
-        with open(MASTER_META, "r") as f:
-            return f.read()
+        return open(MASTER_META).read()
     return "N/A"
 
 def save_master(df):
+    # backup ก่อน
+    if os.path.exists(MASTER_FILE):
+        timestamp = datetime.now(tz).strftime("%Y%m%d_%H%M%S")
+        shutil.copy(MASTER_FILE, f"{BACKUP_FOLDER}/master_{timestamp}.parquet")
+
     df.to_parquet(MASTER_FILE)
     with open(MASTER_META, "w") as f:
         f.write(datetime.now(tz).strftime("%d %b %Y %H:%M:%S"))
+
+def rollback_master():
+    files = sorted(os.listdir(BACKUP_FOLDER), reverse=True)
+    if not files:
+        return False
+
+    latest_backup = files[0]
+    shutil.copy(f"{BACKUP_FOLDER}/{latest_backup}", MASTER_FILE)
+    return True
 
 def prepare(df, rate_col_name):
     key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
@@ -110,10 +120,26 @@ master_df = load_master()
 master_time = get_master_time()
 
 st.markdown(f"""
-<div style="font-size:14px; color:gray; margin-bottom:15px;">
+<div style="font-size:14px; color:gray; margin-bottom:10px;">
 💾 Master Last Updated: <b>{master_time}</b>
 </div>
 """, unsafe_allow_html=True)
+
+# ===== VIEW MASTER =====
+if master_df is not None:
+    with st.expander("📂 View Master Data"):
+        st.write(f"Total Records: {len(master_df)}")
+        st.dataframe(master_df, use_container_width=True)
+
+# ===== ROLLBACK =====
+col_rb1, col_rb2 = st.columns([1,5])
+with col_rb1:
+    if st.button("🔁 Rollback Master"):
+        success = rollback_master()
+        if success:
+            st.success("✅ Rolled back to previous version")
+        else:
+            st.warning("⚠️ No backup available")
 
 # ===== MAIN =====
 if file:
@@ -126,7 +152,6 @@ if file:
 
         # ===== SUMMARY =====
         st.markdown("### 📊 Summary")
-
         col1, col2, col3, col4 = st.columns(4)
 
         col1.markdown(f'<div class="metric-box">🟢 NEW<br><h2>{(result["STATUS"]=="NEW").sum()}</h2></div>', unsafe_allow_html=True)
@@ -142,7 +167,6 @@ if file:
 
         st.markdown("### 📋 Compare Result")
 
-        # ===== HIGHLIGHT =====
         def highlight_status(row):
             if row["STATUS"] == "CHANGED":
                 return ["background-color: #ffe6e6"] * len(row)
@@ -177,4 +201,4 @@ if file:
     if st.button("💾 Save as Master"):
         master_save = df_new.rename(columns={"RATE_NEW": "RATE"})
         save_master(master_save)
-        st.success("✅ Saved as Master")
+        st.success("✅ Saved as Master (Backup created)")
