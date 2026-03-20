@@ -1,120 +1,125 @@
 import streamlit as st
 import pandas as pd
-import requests
+import re
 from datetime import datetime
 
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+
+st.title("🔥 AIS IR Rate Scraper (Selenium UI)")
+
 # ======================================
-st.title("🔥 AIS IR Rate Scraper (HTML Fuzzy Mapping)")
-
 # CONFIG
-countries = ["japan", "thailand", "singapore"]
-plans = ["postpaid", "prepaid"]
+# ======================================
+countries = [
+    "afghanistan",
+    "albania",
+    "algeria"
+]
+plans = ["prepaid", "postpaid"]
 
-# Mapping keywords → CHARGE_CODE + CHARGE_CODE_NAME
-keyword_mapping = {
-    "local": ("400001021", "C_IR_MOC_VISIT"),
-    "thai": ("400001019", "C_IR_MOC_THAI"),
-    "global": ("400001020", "C_IR_MOC_3RD"),
-    "receiving": ("400001028", "C_IR_MTC"),
-    "sms": ("400001029", "C_IR_SMS_MO_THAI"),
+charge_mapping = {
+    "LOCAL_CALL": ("400001021", "C_IR_MOC_VISIT"),
+    "CALL_THAI": ("400001019", "C_IR_MOC_THAI"),
+    "GLOBAL_CALL": ("400001020", "C_IR_MOC_3RD"),
+    "RECEIVING": ("400001028", "C_IR_MTC"),
+    "SMS": ("400001029", "C_IR_SMS_MO_THAI")
+}
+
+plan_mapping = {
+    "postpaid": "sms_ir_pos",
+    "prepaid": "sms_ir"
 }
 
 # ======================================
-# FUNCTION: Scrape HTML table
-def scrape_ais_html(country, plan):
-    url = f"https://www.ais.th/en/consumers/package/international/roaming/rate/{country}/{plan}/all"
-    try:
-        res = requests.get(url, timeout=10)
-        if res.status_code != 200:
-            return {"error": f"status {res.status_code}"}
+# FUNCTION: Selenium Scrape
+# ======================================
+def scrape_ais_rate(country_slug, plan):
 
-        # ใช้ lxml / html5lib fallback
-        try:
-            tables = pd.read_html(res.text, flavor='lxml')
-        except ImportError:
-            tables = pd.read_html(res.text, flavor='html5lib')
+    url = f"https://www.ais.th/en/consumers/package/international/roaming/rate/{country_slug}/{plan}/all"
+    
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=options
+    )
+    
+    wait = WebDriverWait(driver, 15)
+    driver.get(url)
+    wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+    text = driver.find_element(By.TAG_NAME, "body").text
 
-        if not tables:
-            return {"error": "No tables found"}
+    def safe_search(pattern):
+        match = re.search(pattern, text, re.IGNORECASE)
+        return match.group(1) if match else None
 
-        df_table = tables[0]
-        df_table["COUNTRY_NAME"] = country.upper()
-        df_table["SERVICE_TYPE"] = plan
+    driver.quit()
 
-        return df_table
-
-    except Exception as e:
-        return {"error": str(e)}
+    return {
+        "COUNTRY_NAME": country_slug.replace("-", " ").upper(),
+        "SERVICE_TYPE": plan_mapping.get(plan, plan),
+        "LOCAL_CALL": safe_search(r"Local Call\s+([\d.]+)"),
+        "CALL_THAI": safe_search(r"Call to Thai\s+([\d.]+)"),
+        "GLOBAL_CALL": safe_search(r"Global Call\s+([\d.]+)"),
+        "RECEIVING": safe_search(r"Receiving calls\s+([\d.]+)"),
+        "SMS": safe_search(r"SMS Roaming\s+([\d.]+)")
+    }
 
 # ======================================
-# FUNCTION: Transform & fuzzy map
-def transform_df_auto(df_table):
-    final_rows = []
-
-    for _, row in df_table.iterrows():
-        for col in df_table.columns:
-            if col in ["COUNTRY_NAME", "SERVICE_TYPE"]:
-                continue
-
-            try:
-                rate = float(row[col])
-            except:
-                continue
-
-            col_lower = str(col).lower()
-            code = name = None
-            for kw, (c, n) in keyword_mapping.items():
-                if kw in col_lower:
-                    code = c
-                    name = n
-                    break
-
-            if code:
-                final_rows.append({
-                    "PROMOTION_TYPE": "normal",
-                    "SERVICE_TYPE": row["SERVICE_TYPE"],
-                    "CHARGE_CODE": code,
-                    "CHARGE_CODE_NAME": name,
-                    "RATE": rate,
-                    "COUNTRY_NAME": row["COUNTRY_NAME"],
-                    "USER_DATE": datetime.now()
-                })
-
-    return pd.DataFrame(final_rows)
-
+# Streamlit button
 # ======================================
-# Streamlit Interface
-st.subheader("🚀 AIS IR Rate Scraper (HTML + Fuzzy Mapping)")
+if st.button("▶️ Run Scraper"):
 
-if st.button("▶️ Run Scraper Now"):
-    all_rows = []
+    st.info("⏳ Scraping data... กรุณารอซักครู่")
+    scraped_rows = []
     logs = []
 
     for c in countries:
         for p in plans:
-            df_table = scrape_ais_html(c, p)
-            if isinstance(df_table, dict) and "error" in df_table:
-                logs.append(f"❌ {c}-{p}: {df_table['error']}")
-            else:
+            st.text(f"Scraping {c.upper()} - {p}")
+            try:
+                row = scrape_ais_rate(c, p)
+                scraped_rows.append(row)
                 logs.append(f"✅ {c}-{p}")
-                st.subheader(f"Columns for {c}-{p}")
-                st.write(list(df_table.columns))
-                final_df = transform_df_auto(df_table)
-                all_rows.append(final_df)
+            except Exception as e:
+                logs.append(f"❌ {c}-{p}: {e}")
 
-    # Logs
     st.subheader("🧪 Logs")
     for l in logs:
         st.text(l)
 
-    # Combine all
-    if all_rows:
-        combined_df = pd.concat(all_rows, ignore_index=True)
-        st.success(f"✅ Done: {len(combined_df)} rows")
-        st.dataframe(combined_df)
+    if scraped_rows:
+        scraped_df = pd.DataFrame(scraped_rows)
+        final_rows = []
+        for _, row in scraped_df.iterrows():
+            for rate_type, (charge_code, charge_name) in charge_mapping.items():
+                rate_value = row[rate_type]
+                if rate_value is None:
+                    continue
+                final_rows.append({
+                    "PROMOTION_TYPE": "normal",
+                    "SERVICE_TYPE": row["SERVICE_TYPE"],
+                    "CHARGE_CODE": charge_code,
+                    "CHARGE_CODE_NAME": charge_name,
+                    "RATE": rate_value,
+                    "COUNTRY_NAME": row["COUNTRY_NAME"],
+                    "USER_DATE": datetime.now()
+                })
+        final_df = pd.DataFrame(final_rows)
+        st.success(f"✅ Done: {len(final_df)} rows")
+        st.dataframe(final_df)
 
-        # Download CSV
-        csv = combined_df.to_csv(index=False).encode("utf-8")
+        # CSV download
+        csv = final_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             "📥 Download CSV",
             data=csv,
@@ -122,6 +127,4 @@ if st.button("▶️ Run Scraper Now"):
             mime="text/csv"
         )
     else:
-        st.error("❌ ยังไม่ได้ data → ตรวจสอบ deeper")
-else:
-    st.info("💡 กดปุ่ม 'Run Scraper Now' เพื่ออัปเดตข้อมูลล่าสุด")
+        st.error("❌ ยังไม่ได้ data")
