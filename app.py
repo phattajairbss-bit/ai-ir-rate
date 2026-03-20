@@ -25,28 +25,38 @@ os.makedirs(BACKUP_FOLDER, exist_ok=True)
 # ===== CSS =====
 st.markdown("""
 <style>
+
+/* ===== GLOBAL FONT ===== */
 html, body, [class*="css"] {
     font-family: 'Segoe UI', 'Roboto', sans-serif;
 }
+
+/* ===== BACKGROUND GREEN ===== */
 .stApp {
-    background: linear-gradient(to right, #f5f7fa, #c3cfe2);
-}
-.main-title {
-    font-size: 34px;
-    font-weight: 700;
+    background: linear-gradient(to right, #d1fae5, #a7f3d0);
 }
 
-/* STEP UI */
+/* ===== TITLE ===== */
+.main-title {
+    font-size: 42px;
+    font-weight: 800;
+    color: #065f46;
+}
+
+/* ===== STEP ===== */
 .step {
-    font-size: 32px;
+    font-size: 34px;
     font-weight: 700;
-    color: #4f46e5;
+    color: #047857;
     margin-right: 10px;
 }
+
 .step-title {
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 600;
+    color: #064e3b;
 }
+
 .step-box {
     display: flex;
     align-items: center;
@@ -54,14 +64,20 @@ html, body, [class*="css"] {
     margin-bottom: 10px;
 }
 
-/* CARD */
+/* ===== CARD ===== */
 .metric-box {
     background: white;
     padding: 15px;
     border-radius: 12px;
     text-align: center;
-    box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
+    box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
 }
+
+/* ===== TABLE ===== */
+.dataframe {
+    background-color: white;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -69,7 +85,7 @@ html, body, [class*="css"] {
 st.markdown('<div class="main-title">🌍 CGV Rate Compare Dashboard</div>', unsafe_allow_html=True)
 
 st.markdown(f"""
-<div style="font-size:14px; color:gray;">
+<div style="font-size:14px; color:#065f46;">
 🕒 Last Run: <b>{run_time}</b>
 </div>
 """, unsafe_allow_html=True)
@@ -132,7 +148,7 @@ master_df = load_master()
 master_time = get_master_time()
 
 st.markdown(f"""
-<div style="font-size:14px; color:gray;">
+<div style="font-size:14px; color:#065f46;">
 💾 Master Last Updated: <b>{master_time}</b>
 </div>
 """, unsafe_allow_html=True)
@@ -207,6 +223,7 @@ if file:
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             result.to_excel(writer, index=False)
+
         st.download_button("📥 Download Excel", data=output.getvalue(), file_name="rate_compare.xlsx")
 
     else:
