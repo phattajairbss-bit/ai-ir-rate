@@ -30,16 +30,16 @@ html, body, [class*="css"] {
     font-family: 'Segoe UI', 'Roboto', sans-serif;
 }
 
-/* ===== BACKGROUND PINK ===== */
+/* ===== BACKGROUND YELLOW ===== */
 .stApp {
-    background: linear-gradient(to right, #ffe6f0, #ffd1e0);
+    background: linear-gradient(to right, #fff9e6, #fff2cc);
 }
 
 /* ===== HEADER GREEN ===== */
 .header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: left;
     padding: 10px 40px;
     background-color: #047857;
     border-radius: 12px;
@@ -48,9 +48,6 @@ html, body, [class*="css"] {
     font-size: 42px;
     font-weight: 800;
     color: white;
-}
-.logo {
-    height: 50px;
 }
 
 /* ===== STEP GREEN ===== */
@@ -103,7 +100,6 @@ html, body, [class*="css"] {
 st.markdown(f"""
 <div class="header">
     <div class="main-title">🌍 AI-powered IR Rate / CGV</div>
-    <img src="plane_logo.png" class="logo">
 </div>
 """, unsafe_allow_html=True)
 
