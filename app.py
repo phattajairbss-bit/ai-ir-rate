@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 import pytz
 import shutil
+import plotly.express as px
 
 st.set_page_config(
     page_title="CGV Rate IR Compare Dashboard",
@@ -12,9 +13,62 @@ st.set_page_config(
     page_icon="🌍"
 )
 
+# ===== SESSION STATE =====
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+
+# ===== THEME TOGGLE =====
+toggle = st.toggle("🌙 Dark Mode", value=st.session_state.dark_mode)
+st.session_state.dark_mode = toggle
+
+# ===== CSS =====
+if st.session_state.dark_mode:
+    bg = "#0f172a"
+    card = "#1e293b"
+    text = "white"
+else:
+    bg = "#f8fafc"
+    card = "white"
+    text = "#111827"
+
+st.markdown(f"""
+<style>
+.stApp {{
+    background: {bg};
+    color: {text};
+}}
+
+.header {{
+    padding: 20px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #065f46, #047857);
+    color: white;
+}}
+
+.card {{
+    background: {card};
+    padding: 18px;
+    border-radius: 12px;
+    margin-top: 15px;
+}}
+
+.metric {{
+    padding: 15px;
+    border-radius: 10px;
+    text-align: center;
+    color: white;
+}}
+.green {{ background:#16a34a; }}
+.red {{ background:#dc2626; }}
+.orange {{ background:#f59e0b; }}
+.gray {{ background:#6b7280; }}
+
+</style>
+""", unsafe_allow_html=True)
+
 # ===== TIME =====
 tz = pytz.timezone("Asia/Bangkok")
-run_time = datetime.now(tz).strftime("%d %b %Y %H:%M:%S")
+run_time = datetime.now(tz).strftime("%d %b %Y %H:%M")
 
 # ===== PATH =====
 MASTER_FILE = "master_rate.parquet"
@@ -22,102 +76,11 @@ MASTER_META = "master_meta.txt"
 BACKUP_FOLDER = "master_backup"
 os.makedirs(BACKUP_FOLDER, exist_ok=True)
 
-# ===== CSS + GIF =====
-st.markdown("""
-<style>
-html, body, [class*="css"] {
-    font-family: 'Segoe UI', 'Roboto', sans-serif;
-}
-
-/* ===== BACKGROUND YELLOW ===== */
-.stApp {
-    background: linear-gradient(to right, #fff9e6, #fff2cc);
-}
-
-/* ===== HEADER GREEN ===== */
-.header {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: left;
-    padding: 10px 40px;
-    background-color: #047857;
-    border-radius: 12px;
-    overflow: hidden;
-}
-.main-title {
-    font-size: 42px;
-    font-weight: 800;
-    color: white;
-}
-
-/* ===== STEP GREEN ===== */
-.step-box {
-    display: flex;
-    align-items: center;
-    margin-top: 20px;
-    margin-bottom: 10px;
-    background-color: #065f46;
-    padding: 10px 15px;
-    border-radius: 12px;
-}
-.step {
-    font-size: 34px;
-    font-weight: 700;
-    width: 60px;
-    height: 60px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border-radius: 50%;
-    background-color: #ffffff;
-    color: #065f46;
-    margin-right: 15px;
-}
-.step-title {
-    font-size: 22px;
-    font-weight: 600;
-    color: #e0f2f1;
-}
-
-/* ===== CARD ===== */
-.metric-box {
-    background: white;
-    padding: 15px;
-    border-radius: 12px;
-    text-align: center;
-    box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
-}
-
-/* ===== TABLE ===== */
-.dataframe {
-    background-color: white;
-}
-
-/* ===== PLANE GIF ===== */
-#plane {
-    position: absolute;
-    width: 50px;
-    top: -10px;
-    right: -50px;
-    animation: fly 8s linear infinite;
-}
-@keyframes fly {
-    0% { transform: translateX(0) rotate(0deg);}
-    50% { transform: translateX(-600px) translateY(20px) rotate(20deg);}
-    100% { transform: translateX(0) rotate(0deg);}
-}
-</style>
-
-<div class="header">
-    <div class="main-title">🌍 AI-powered IR Rate / CGV</div>
-    <img id="plane" src="https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExdnRldnR6MW1pNTl2MTEzMDMxbGl2cmdrem5wdnZ3ZG92eHltcTU1bSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/eMmXpS3nHJM4VeJ0o0/giphy.gif">
-</div>
-""", unsafe_allow_html=True)
-
+# ===== HEADER =====
 st.markdown(f"""
-<div style="font-size:14px; color:#065f46;">
-🕒 Last Run: <b>{run_time}</b>
+<div class="header">
+    <h2>🌍 IR Rate / CGV Dashboard</h2>
+    <p>AI-powered comparison • {run_time}</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -144,129 +107,158 @@ def rollback_master():
     files = sorted(os.listdir(BACKUP_FOLDER), reverse=True)
     if not files:
         return False
-    latest = files[0]
-    shutil.copy(f"{BACKUP_FOLDER}/{latest}", MASTER_FILE)
+    shutil.copy(f"{BACKUP_FOLDER}/{files[0]}", MASTER_FILE)
     return True
 
-def prepare(df, rate_col_name):
-    key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
-    df = df.copy()
-    if "RATE" not in df.columns:
-        st.error("❌ คอลัมน์ 'RATE' ไม่พบในไฟล์ Excel กรุณาตรวจสอบชื่อคอลัมน์")
-        return None
-    df["RATE"] = pd.to_numeric(df["RATE"], errors="coerce")
-    df = df[key_cols + ["RATE"]].drop_duplicates()
-    return df.rename(columns={"RATE": rate_col_name})
+# ===== VALIDATION =====
+def validate(df):
+    required = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE", "RATE"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        st.error(f"❌ Missing columns: {missing}")
+        return False
+    return True
 
-def compare(df_master, df_new):
-    key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
-    df = pd.merge(df_master, df_new, on=key_cols, how="outer")
-    def get_status(row):
-        if pd.isna(row["RATE_MASTER"]):
-            return "NEW"
-        elif pd.isna(row["RATE_NEW"]):
-            return "REMOVED"
-        elif row["RATE_MASTER"] != row["RATE_NEW"]:
-            return "CHANGED"
-        else:
-            return "SAME"
-    df["STATUS"] = df.apply(get_status, axis=1)
+# ===== PREP =====
+def prepare(df, col):
+    df["RATE"] = pd.to_numeric(df["RATE"], errors="coerce")
+    return df[["COUNTRY_NAME","CHARGE_CODE","SERVICE_TYPE","RATE"]].rename(columns={"RATE": col})
+
+# ===== COMPARE =====
+def compare(m, n):
+    df = pd.merge(m, n, on=["COUNTRY_NAME","CHARGE_CODE","SERVICE_TYPE"], how="outer")
+
+    def status(r):
+        if pd.isna(r["RATE_MASTER"]): return "NEW"
+        if pd.isna(r["RATE_NEW"]): return "REMOVED"
+        if r["RATE_MASTER"] != r["RATE_NEW"]: return "CHANGED"
+        return "SAME"
+
+    df["STATUS"] = df.apply(status, axis=1)
     df["DIFF"] = df["RATE_NEW"] - df["RATE_MASTER"]
-    return df.sort_values(key_cols)
+    return df
 
 # ===== LOAD MASTER =====
 master_df = load_master()
 master_time = get_master_time()
 
-st.markdown(f"""
-<div style="font-size:14px; color:#065f46;">
-💾 Master Last Updated: <b>{master_time}</b>
-</div>
-""", unsafe_allow_html=True)
+# ===== MASTER SECTION =====
+st.markdown('<div class="card">', unsafe_allow_html=True)
+st.subheader("💾 Master Data")
+st.caption(f"Last updated: {master_time}")
 
-# ===== VIEW MASTER =====
-if master_df is not None:
-    with st.expander("📂 View Master Data"):
-        st.write(f"Total Records: {len(master_df)}")
-        st.dataframe(master_df, use_container_width=True)
-
-# ===== ROLLBACK =====
-if st.button("🔁 Rollback Master"):
+col1, col2 = st.columns([1,1])
+if col1.button("🔁 Rollback"):
     if rollback_master():
-        st.success("✅ Rolled back to previous version")
+        st.success("Rollback success")
     else:
-        st.warning("⚠️ No backup available")
+        st.warning("No backup")
 
-# ===== STEP 1 =====
-st.markdown("""
-<div class="step-box">
-    <div class="step">1</div>
-    <div class="step-title">Upload New File</div>
-</div>
-""", unsafe_allow_html=True)
+if master_df is not None:
+    st.dataframe(master_df, use_container_width=True)
 
-file = st.file_uploader("", type=["xlsx"])
+st.markdown('</div>', unsafe_allow_html=True)
 
-# ===== MAIN =====
+# ===== UPLOAD =====
+st.markdown('<div class="card">', unsafe_allow_html=True)
+st.subheader("📤 Upload File")
+file = st.file_uploader("Upload Excel", type=["xlsx"])
+st.markdown('</div>', unsafe_allow_html=True)
+
 if file:
-    df_new_raw = pd.read_excel(file)
-    df_new = prepare(df_new_raw, "RATE_NEW")
-    if df_new is None:
+    df_raw = pd.read_excel(file)
+
+    # VALIDATION
+    if not validate(df_raw):
         st.stop()
 
+    df_new = prepare(df_raw, "RATE_NEW")
+
     if master_df is not None:
-        df_master = master_df.rename(columns={"RATE": "RATE_MASTER"})
+        df_master = master_df.rename(columns={"RATE":"RATE_MASTER"})
         result = compare(df_master, df_new)
 
+        # ===== FILTER =====
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.subheader("🔍 Filters")
+
+        col1, col2 = st.columns(2)
+        country = col1.multiselect("Country", result["COUNTRY_NAME"].dropna().unique())
+        charge = col2.multiselect("Charge Code", result["CHARGE_CODE"].dropna().unique())
+
+        if country:
+            result = result[result["COUNTRY_NAME"].isin(country)]
+        if charge:
+            result = result[result["CHARGE_CODE"].isin(charge)]
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
         # ===== SUMMARY =====
-        st.markdown("### 📊 Summary")
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.subheader("📊 Summary")
+
         col1, col2, col3, col4 = st.columns(4)
-        col1.markdown(f'<div class="metric-box">🟢 NEW<br><h2>{(result["STATUS"]=="NEW").sum()}</h2></div>', unsafe_allow_html=True)
-        col2.markdown(f'<div class="metric-box">🔴 CHANGED<br><h2>{(result["STATUS"]=="CHANGED").sum()}</h2></div>', unsafe_allow_html=True)
-        col3.markdown(f'<div class="metric-box">🟠 REMOVED<br><h2>{(result["STATUS"]=="REMOVED").sum()}</h2></div>', unsafe_allow_html=True)
-        col4.markdown(f'<div class="metric-box">⚪ SAME<br><h2>{(result["STATUS"]=="SAME").sum()}</h2></div>', unsafe_allow_html=True)
+        col1.markdown(f'<div class="metric green"><h2>{(result.STATUS=="NEW").sum()}</h2>NEW</div>', unsafe_allow_html=True)
+        col2.markdown(f'<div class="metric red"><h2>{(result.STATUS=="CHANGED").sum()}</h2>CHANGED</div>', unsafe_allow_html=True)
+        col3.markdown(f'<div class="metric orange"><h2>{(result.STATUS=="REMOVED").sum()}</h2>REMOVED</div>', unsafe_allow_html=True)
+        col4.markdown(f'<div class="metric gray"><h2>{(result.STATUS=="SAME").sum()}</h2>SAME</div>', unsafe_allow_html=True)
 
-        if st.checkbox("Show Differences Only", value=True):
-            result_display = result[result["STATUS"] != "SAME"]
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # ===== CHART =====
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.subheader("📈 Difference Chart")
+
+        chart_df = result[result["STATUS"]=="CHANGED"].copy()
+        if not chart_df.empty:
+            fig = px.bar(chart_df.head(20),
+                         x="CHARGE_CODE",
+                         y="DIFF",
+                         color="COUNTRY_NAME")
+            st.plotly_chart(fig, use_container_width=True)
         else:
-            result_display = result
+            st.info("No changed data")
 
-        st.markdown("### 📋 Compare Result")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # ===== TABLE =====
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.subheader("📋 Compare Result")
+
+        show_diff = st.toggle("Show differences only", True)
+
+        if show_diff:
+            display = result[result["STATUS"]!="SAME"]
+        else:
+            display = result
+
+        # HIGHLIGHT
         def highlight(row):
             if row["STATUS"] == "CHANGED":
-                return ["background-color: #ffe6e6"]*len(row)
-            elif row["STATUS"] == "NEW":
-                return ["background-color: #e6ffe6"]*len(row)
-            elif row["STATUS"] == "REMOVED":
-                return ["background-color: #fff3e6"]*len(row)
+                return ["background-color:#fee2e2"]*len(row)
+            if row["STATUS"] == "NEW":
+                return ["background-color:#dcfce7"]*len(row)
+            if row["STATUS"] == "REMOVED":
+                return ["background-color:#fef3c7"]*len(row)
             return [""]*len(row)
-        st.dataframe(result_display.style.apply(highlight, axis=1), use_container_width=True)
 
-        # ===== STEP 2 =====
-        st.markdown("""
-        <div class="step-box">
-            <div class="step">2</div>
-            <div class="step-title">Download Compare Result</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.dataframe(display.style.apply(highlight, axis=1), use_container_width=True)
 
+        # DOWNLOAD
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             result.to_excel(writer, index=False)
-        st.download_button("📥 Download Excel", data=output.getvalue(), file_name="rate_compare.xlsx")
+
+        st.download_button("📥 Download Excel", output.getvalue(), "compare.xlsx")
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
     else:
-        st.info("📌 First upload → Save as Master")
+        st.info("First upload → Save as Master")
 
-    # ===== STEP 3 =====
-    st.markdown("""
-    <div class="step-box">
-        <div class="step">3</div>
-        <div class="step-title">Save as Master</div>
-    </div>
-    """, unsafe_allow_html=True)
-
+    # ===== SAVE =====
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     if st.button("💾 Save as Master"):
-        master_save = df_new.rename(columns={"RATE_NEW": "RATE"})
-        save_master(master_save)
-        st.success("✅ Saved as Master (Backup created)")
+        save_master(df_new.rename(columns={"RATE_NEW":"RATE"}))
+        st.success("Saved!")
+    st.markdown('</div>', unsafe_allow_html=True)
