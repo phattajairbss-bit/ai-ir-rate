@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
 import requests
-import json
 import re
 from datetime import datetime
+import schedule
+import time
 
-st.title("📊 AIS IR Rate Auto Fetch (Final)")
+st.title("🔥 AIS IR Rate (API Mode - Real Fix)")
 
 # ======================================
 # CONFIG
@@ -27,38 +28,26 @@ charge_mapping = {
 }
 
 headers = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json",
 }
 
 # ======================================
-# SCRAPE FUNCTION
+# FUNCTION: Scrape & Transform
 # ======================================
 def scrape_ais_rate(country, plan):
-
-    url = f"https://www.ais.th/en/consumers/package/international/roaming/rate/{country}/{plan}/all"
-
-    try:
-        res = requests.get(url, headers=headers, timeout=15)
-    except Exception as e:
-        return {"error": f"request fail: {e}"}
+    url = f"https://www.ais.th/_next/data/production/en/consumers/package/international/roaming/rate/{country}/{plan}/all.json"
+    res = requests.get(url, headers=headers)
 
     if res.status_code != 200:
         return {"error": f"status {res.status_code}"}
 
-    match = re.search(
-        r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
-        res.text
-    )
-
-    if not match:
-        return {"error": "no NEXT_DATA"}
-
     try:
-        data = json.loads(match.group(1))
+        data = res.json()
     except:
-        return {"error": "json parse error"}
+        return {"error": "json parse fail"}
 
-    text = json.dumps(data)
+    text = str(data)
 
     def extract(label):
         m = re.search(rf"{label}.*?([\d]+\.\d+|\d+)", text, re.IGNORECASE)
@@ -74,92 +63,82 @@ def scrape_ais_rate(country, plan):
         "SMS": extract("SMS")
     }
 
-# ======================================
-# AUTO RUN
-# ======================================
-st.write("🚀 Running...")
 
-rows = []
-debug_logs = []
+def run_scraper():
+    rows = []
+    logs = []
 
-progress = st.progress(0)
+    for c in countries:
+        for p in plans:
+            result = scrape_ais_rate(c, p)
 
-total = len(countries) * len(plans)
-step = 0
+            if "error" in result:
+                logs.append(f"❌ {c}-{p}: {result['error']}")
+            else:
+                logs.append(f"✅ {c}-{p}")
+                rows.append(result)
 
-for c in countries:
-    for p in plans:
+    if not rows:
+        print("❌ ยังไม่ได้ data → ตรวจสอบ deeper")
+        return None, logs
 
-        step += 1
+    df = pd.DataFrame(rows)
 
-        result = scrape_ais_rate(c, p)
+    final_rows = []
+    for _, row in df.iterrows():
+        for rate_type, (code, name) in charge_mapping.items():
+            rate = row[rate_type]
+            if not rate:
+                continue
 
-        if "error" in result:
-            debug_logs.append(f"❌ {c}-{p}: {result['error']}")
-        else:
-            debug_logs.append(f"✅ {c}-{p}")
-            rows.append(result)
+            final_rows.append({
+                "PROMOTION_TYPE": "normal",
+                "SERVICE_TYPE": row["SERVICE_TYPE"],
+                "CHARGE_CODE": code,
+                "CHARGE_CODE_NAME": name,
+                "RATE": rate,
+                "COUNTRY_NAME": row["COUNTRY_NAME"],
+                "USER_DATE": datetime.now()
+            })
 
-        progress.progress(step / total)
-
-# ======================================
-# DEBUG
-# ======================================
-st.subheader("🧪 Debug Log")
-for log in debug_logs:
-    st.text(log)
-
-if not rows:
-    st.error("❌ ไม่มีข้อมูล (0 rows)")
-    st.stop()
-
-# ======================================
-# RAW DATA
-# ======================================
-df = pd.DataFrame(rows)
-st.subheader("📄 Raw Data")
-st.dataframe(df)
+    final_df = pd.DataFrame(final_rows)
+    return final_df, logs
 
 # ======================================
-# TRANSFORM
+# STREAMLIT INTERFACE
 # ======================================
-final_rows = []
+st.subheader("🚀 Logs / Status")
+final_df, logs = run_scraper()
 
-for _, row in df.iterrows():
-    for rate_type, (code, name) in charge_mapping.items():
+for l in logs:
+    st.text(l)
 
-        rate = row[rate_type]
+if final_df is not None:
+    st.success(f"✅ Done: {len(final_df)} rows")
+    st.dataframe(final_df)
 
-        if not rate:
-            continue
-
-        final_rows.append({
-            "PROMOTION_TYPE": "normal",
-            "SERVICE_TYPE": row["SERVICE_TYPE"],
-            "CHARGE_CODE": code,
-            "CHARGE_CODE_NAME": name,
-            "RATE": rate,
-            "COUNTRY_NAME": row["COUNTRY_NAME"],
-            "USER_DATE": datetime.now()
-        })
-
-final_df = pd.DataFrame(final_rows)
+    csv = final_df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "📥 Download CSV",
+        data=csv,
+        file_name="ais_ir_rate.csv",
+        mime="text/csv",
+    )
 
 # ======================================
-# RESULT
+# OPTIONAL: Scheduler (ถ้าต้องการรันอัตโนมัติ)
 # ======================================
-st.success(f"✅ Done: {len(final_df)} rows")
-st.subheader("📊 Final Data")
-st.dataframe(final_df)
+def scheduled_job():
+    print("📅 Running scheduled job...")
+    df, logs = run_scraper()
+    if df is not None:
+        df.to_csv(f"ais_ir_rate_{datetime.now().strftime('%Y%m%d')}.csv", index=False)
+        print(f"✅ Saved {len(df)} rows")
 
-# ======================================
-# DOWNLOAD CSV
-# ======================================
-csv = final_df.to_csv(index=False).encode("utf-8")
+# รันทุกวันจันทร์ 09:00
+schedule.every().monday.at("09:00").do(scheduled_job)
 
-st.download_button(
-    "📥 Download CSV",
-    data=csv,
-    file_name="ais_ir_rate.csv",
-    mime="text/csv",
-)
+# ใช้สำหรับ run บนเครื่อง server / cron alternative
+# while True:
+#     schedule.run_pending()
+#     time.sleep(60)
