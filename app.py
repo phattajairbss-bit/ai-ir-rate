@@ -7,7 +7,7 @@ import pytz
 import shutil
 
 st.set_page_config(
-    page_title="CGV Rate Compare Dashboard",
+    page_title="CGV Rate IR Compare Dashboard",
     layout="wide",
     page_icon="🌍"
 )
@@ -25,7 +25,6 @@ os.makedirs(BACKUP_FOLDER, exist_ok=True)
 # ===== CSS =====
 st.markdown("""
 <style>
-
 /* ===== GLOBAL FONT ===== */
 html, body, [class*="css"] {
     font-family: 'Segoe UI', 'Roboto', sans-serif;
@@ -36,11 +35,20 @@ html, body, [class*="css"] {
     background: linear-gradient(to right, #d1fae5, #a7f3d0);
 }
 
-/* ===== TITLE ===== */
+/* ===== HEADER ===== */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 40px;
+}
 .main-title {
     font-size: 42px;
     font-weight: 800;
     color: #065f46;
+}
+.logo {
+    height: 50px;
 }
 
 /* ===== STEP ===== */
@@ -50,13 +58,11 @@ html, body, [class*="css"] {
     color: #047857;
     margin-right: 10px;
 }
-
 .step-title {
     font-size: 22px;
     font-weight: 600;
     color: #064e3b;
 }
-
 .step-box {
     display: flex;
     align-items: center;
@@ -77,12 +83,16 @@ html, body, [class*="css"] {
 .dataframe {
     background-color: white;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
 # ===== HEADER =====
-st.markdown('<div class="main-title">🌍 CGV Rate Compare Dashboard</div>', unsafe_allow_html=True)
+st.markdown(f"""
+<div class="header">
+    <div class="main-title">🌍 AI-powered IR rate / CGV</div>
+    <img src="ais_logo.png" class="logo">
+</div>
+""", unsafe_allow_html=True)
 
 st.markdown(f"""
 <div style="font-size:14px; color:#065f46;">
@@ -105,7 +115,6 @@ def save_master(df):
     if os.path.exists(MASTER_FILE):
         timestamp = datetime.now(tz).strftime("%Y%m%d_%H%M%S")
         shutil.copy(MASTER_FILE, f"{BACKUP_FOLDER}/master_{timestamp}.parquet")
-
     df.to_parquet(MASTER_FILE)
     with open(MASTER_META, "w") as f:
         f.write(datetime.now(tz).strftime("%d %b %Y %H:%M:%S"))
@@ -128,7 +137,6 @@ def prepare(df, rate_col_name):
 def compare(df_old, df_new):
     key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
     df = pd.merge(df_old, df_new, on=key_cols, how="outer")
-
     def get_status(row):
         if pd.isna(row["RATE_OLD"]):
             return "NEW"
@@ -138,7 +146,6 @@ def compare(df_old, df_new):
             return "CHANGED"
         else:
             return "SAME"
-
     df["STATUS"] = df.apply(get_status, axis=1)
     df["DIFF"] = df["RATE_NEW"] - df["RATE_OLD"]
     return df.sort_values(key_cols)
@@ -188,7 +195,6 @@ if file:
         # ===== SUMMARY =====
         st.markdown("### 📊 Summary")
         col1, col2, col3, col4 = st.columns(4)
-
         col1.markdown(f'<div class="metric-box">🟢 NEW<br><h2>{(result["STATUS"]=="NEW").sum()}</h2></div>', unsafe_allow_html=True)
         col2.markdown(f'<div class="metric-box">🔴 CHANGED<br><h2>{(result["STATUS"]=="CHANGED").sum()}</h2></div>', unsafe_allow_html=True)
         col3.markdown(f'<div class="metric-box">🟠 REMOVED<br><h2>{(result["STATUS"]=="REMOVED").sum()}</h2></div>', unsafe_allow_html=True)
@@ -200,7 +206,6 @@ if file:
             result_display = result
 
         st.markdown("### 📋 Compare Result")
-
         def highlight(row):
             if row["STATUS"] == "CHANGED":
                 return ["background-color: #ffe6e6"]*len(row)
@@ -209,7 +214,6 @@ if file:
             elif row["STATUS"] == "REMOVED":
                 return ["background-color: #fff3e6"]*len(row)
             return [""]*len(row)
-
         st.dataframe(result_display.style.apply(highlight, axis=1), use_container_width=True)
 
         # ===== STEP 2 =====
@@ -223,7 +227,6 @@ if file:
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             result.to_excel(writer, index=False)
-
         st.download_button("📥 Download Excel", data=output.getvalue(), file_name="rate_compare.xlsx")
 
     else:
