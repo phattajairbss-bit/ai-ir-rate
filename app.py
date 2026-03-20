@@ -128,17 +128,18 @@ def prepare(df, rate_col_name, date=None):
     key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
     df = df.copy()
     
-    # ตรวจสอบคอลัมน์ RATE
     if "RATE" not in df.columns:
         st.error("❌ คอลัมน์ 'RATE' ไม่พบในไฟล์ Excel กรุณาตรวจสอบชื่อคอลัมน์")
         return None
     
-    df["RATE_NUM"] = pd.to_numeric(df["RATE"], errors="coerce")  # เก็บ numeric สำหรับคำนวณ
+    df["RATE_NUM"] = pd.to_numeric(df["RATE"], errors="coerce")
     df = df[key_cols + ["RATE_NUM"]].drop_duplicates()
+    
     if date is not None:
         df[rate_col_name] = df["RATE_NUM"].apply(lambda x: f"{x} ({date})")
     else:
         df[rate_col_name] = df["RATE_NUM"]
+    
     return df[key_cols + [rate_col_name, "RATE_NUM"]]
 
 def compare(df_master, df_new):
