@@ -9,42 +9,53 @@ st.set_page_config(
     page_icon="🌍"
 )
 
-# ===== CSS Dashboard Style =====
+# ===== CSS =====
 st.markdown("""
 <style>
-/* background */
+
+/* ===== GLOBAL FONT ===== */
+html, body, [class*="css"] {
+    font-family: 'Segoe UI', 'Roboto', sans-serif;
+    color: #1f2937;
+}
+
+/* ===== BACKGROUND ===== */
 .stApp {
     background: linear-gradient(to right, #f5f7fa, #c3cfe2);
 }
 
-/* header */
+/* ===== HEADER ===== */
 .main-title {
-    font-size: 36px;
-    font-weight: bold;
-    color: #1f2937;
+    font-size: 34px;
+    font-weight: 700;
 }
 
-/* card */
-.card {
-    background: white;
-    padding: 15px;
-    border-radius: 12px;
-    box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+/* ===== HEADINGS ===== */
+h1, h2, h3 {
+    font-weight: 600 !important;
 }
 
-/* metric */
+/* ===== SIDEBAR ===== */
+section[data-testid="stSidebar"] {
+    font-family: 'Segoe UI', 'Roboto', sans-serif;
+}
+
+/* ===== CARD ===== */
 .metric-box {
     background: white;
     padding: 15px;
     border-radius: 12px;
     text-align: center;
     box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
+    font-weight: 500;
 }
 
-/* table */
+/* ===== TABLE ===== */
 .dataframe {
     background-color: white;
+    font-family: 'Segoe UI', 'Roboto', sans-serif;
 }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -53,7 +64,7 @@ st.markdown('<div class="main-title">🌍 CGV Rate Compare Dashboard</div>', uns
 
 MASTER_FILE = "master_rate.parquet"
 
-# ===== function =====
+# ===== FUNCTIONS =====
 def load_master():
     if os.path.exists(MASTER_FILE):
         return pd.read_parquet(MASTER_FILE)
@@ -87,14 +98,16 @@ def compare(df_old, df_new):
     df["DIFF"] = df["RATE_NEW"] - df["RATE_OLD"]
     return df.sort_values(key_cols)
 
-# ===== sidebar =====
+# ===== SIDEBAR =====
 st.sidebar.header("⚙️ Control Panel")
+
 file = st.sidebar.file_uploader("Upload New File", type=["xlsx"])
 show_only_diff = st.sidebar.checkbox("Show Differences Only", value=True)
 
-# ===== load master =====
+# ===== LOAD MASTER =====
 master_df = load_master()
 
+# ===== MAIN =====
 if file:
     df_new_raw = pd.read_excel(file)
     df_new = prepare(df_new_raw, "RATE_NEW")
@@ -121,7 +134,7 @@ if file:
 
         st.markdown("### 📋 Compare Result")
 
-        # ===== highlight =====
+        # ===== HIGHLIGHT =====
         def highlight_status(row):
             if row["STATUS"] == "CHANGED":
                 return ["background-color: #ffe6e6"] * len(row)
@@ -137,7 +150,7 @@ if file:
             use_container_width=True
         )
 
-        # ===== download =====
+        # ===== DOWNLOAD =====
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             result.to_excel(writer, index=False, sheet_name="ALL")
@@ -152,7 +165,7 @@ if file:
     else:
         st.info("📌 First upload → Save as Master")
 
-    # ===== save master =====
+    # ===== SAVE MASTER =====
     if st.button("💾 Save as Master"):
         master_save = df_new.rename(columns={"RATE_NEW": "RATE"})
         save_master(master_save)
