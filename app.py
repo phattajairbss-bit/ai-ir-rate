@@ -1,82 +1,89 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+import os
 
 st.set_page_config(page_title="Rate Compare Tool", layout="wide")
-st.title("🌍 Rate Compare Tool (Correct Logic)")
+st.title("🌍 Rate Compare Tool (with Master)")
 
-file1 = st.file_uploader("Upload File OLD", type=["xlsx"])
-file2 = st.file_uploader("Upload File NEW", type=["xlsx"])
+MASTER_FILE = "master_rate.parquet"
 
-if file1 and file2:
-    try:
-        df1 = pd.read_excel(file1)
-        df2 = pd.read_excel(file2)
+# ===== โหลด master =====
+def load_master():
+    if os.path.exists(MASTER_FILE):
+        return pd.read_parquet(MASTER_FILE)
+    return None
 
-        st.success("✅ Files uploaded")
+# ===== save master =====
+def save_master(df):
+    df.to_parquet(MASTER_FILE)
 
-        # 🔥 ใช้ key ครบ
-        key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
+# ===== prepare =====
+def prepare(df, rate_col_name):
+    key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
 
-        # ===== เตรียม data =====
-        def prepare(df, rate_col_name):
-            df = df.copy()
+    df = df.copy()
+    df["RATE"] = pd.to_numeric(df["RATE"], errors="coerce")
 
-            df["RATE"] = pd.to_numeric(df["RATE"], errors="coerce")
+    df = df[key_cols + ["RATE"]].drop_duplicates()
 
-            # ใช้ unique combination จริง (ไม่ group ทับ)
-            df = df[key_cols + ["RATE"]].drop_duplicates()
+    df = df.rename(columns={"RATE": rate_col_name})
+    return df
 
-            df = df.rename(columns={"RATE": rate_col_name})
-            return df
+# ===== compare =====
+def compare(df_old, df_new):
+    key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
 
-        df1 = prepare(df1, "RATE_OLD")
-        df2 = prepare(df2, "RATE_NEW")
+    df = pd.merge(df_old, df_new, on=key_cols, how="outer")
 
-        # ===== merge =====
-        df = pd.merge(df1, df2, on=key_cols, how="outer")
+    def get_status(row):
+        if pd.isna(row["RATE_OLD"]):
+            return "NEW"
+        elif pd.isna(row["RATE_NEW"]):
+            return "REMOVED"
+        elif row["RATE_OLD"] != row["RATE_NEW"]:
+            return "CHANGED"
+        else:
+            return "SAME"
 
-        # ===== compare =====
-        def get_status(row):
-            if pd.isna(row["RATE_OLD"]):
-                return "NEW"
-            elif pd.isna(row["RATE_NEW"]):
-                return "REMOVED"
-            elif row["RATE_OLD"] != row["RATE_NEW"]:
-                return "CHANGED"
-            else:
-                return "SAME"
+    df["STATUS"] = df.apply(get_status, axis=1)
+    df["DIFF"] = df["RATE_NEW"] - df["RATE_OLD"]
 
-        df["STATUS"] = df.apply(get_status, axis=1)
-        df["DIFF"] = df["RATE_NEW"] - df["RATE_OLD"]
+    return df.sort_values(key_cols)
 
-        df = df.sort_values(key_cols)
+# ===== UI =====
+master_df = load_master()
 
-        # ===== summary =====
-        st.subheader("📊 Summary")
-        st.write(df["STATUS"].value_counts())
+if master_df is None:
+    st.warning("⚠️ No master file found → Upload initial file")
 
-        # ===== show =====
-        st.subheader("📊 All Data")
-        st.dataframe(df, use_container_width=True)
+file = st.file_uploader("Upload NEW File", type=["xlsx"])
 
-        diff_df = df[df["STATUS"] != "SAME"]
+if file:
+    df_new_raw = pd.read_excel(file)
+    df_new = prepare(df_new_raw, "RATE_NEW")
+
+    if master_df is not None:
+        df_old = master_df.rename(columns={"RATE": "RATE_OLD"})
+        result = compare(df_old, df_new)
+
+        st.subheader("📊 Compare Result")
+        st.dataframe(result, use_container_width=True)
+
+        diff_df = result[result["STATUS"] != "SAME"]
 
         st.subheader("⚠️ Differences Only")
         st.dataframe(diff_df, use_container_width=True)
 
-        # ===== download =====
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="ALL")
-            diff_df.to_excel(writer, index=False, sheet_name="DIFF")
+        st.subheader("📊 Summary")
+        st.write(result["STATUS"].value_counts())
 
-        st.download_button(
-            "📥 Download Excel",
-            data=output.getvalue(),
-            file_name="rate_compare.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+    else:
+        st.info("ℹ️ First upload → will become MASTER")
 
-    except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
+    # ===== save as master =====
+    if st.button("💾 Save as Master"):
+        # save clean version (ใช้ RATE เดียว)
+        master_save = df_new.rename(columns={"RATE_NEW": "RATE"})
+        save_master(master_save)
+        st.success("✅ Saved as master file")
