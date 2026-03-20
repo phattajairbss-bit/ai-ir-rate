@@ -6,7 +6,7 @@ from datetime import datetime
 # ======================================
 # Streamlit Title
 # ======================================
-st.title("🔥 AIS IR Rate (HTML Scrape Mode)")
+st.title("🔥 AIS IR Rate (HTML Scrape Mode) - With Charge Code Mapping")
 
 # ======================================
 # CONFIG
@@ -14,14 +14,19 @@ st.title("🔥 AIS IR Rate (HTML Scrape Mode)")
 countries = ["japan", "thailand", "singapore"]
 plans = ["postpaid", "prepaid"]
 
+# Mapping column name จากหน้าเว็บ → CHARGE_CODE + CHARGE_CODE_NAME
+charge_mapping = {
+    "Local Call": ("400001021", "C_IR_MOC_VISIT"),
+    "Call to Thailand": ("400001019", "C_IR_MOC_THAI"),
+    "Global Call": ("400001020", "C_IR_MOC_3RD"),
+    "Receiving Call": ("400001028", "C_IR_MTC"),
+    "SMS": ("400001029", "C_IR_SMS_MO_THAI")
+}
+
 # ======================================
 # FUNCTION: Scrape HTML จากเว็บ AIS
 # ======================================
 def scrape_ais_html(country, plan):
-    """
-    ดึง IR Rate จากหน้าเว็บ AIS
-    fallback ใช้ html5lib ถ้า lxml ไม่ติดตั้ง
-    """
     url = f"https://www.ais.th/en/consumers/package/international/roaming/rate/{country}/{plan}/all"
     try:
         res = requests.get(url, timeout=10)
@@ -36,7 +41,6 @@ def scrape_ais_html(country, plan):
         if not tables:
             return {"error": "No tables found"}
 
-        # Table แรกเป็นราคาหลัก
         df_table = tables[0]
         df_table["COUNTRY_NAME"] = country.upper()
         df_table["SERVICE_TYPE"] = plan
@@ -47,34 +51,32 @@ def scrape_ais_html(country, plan):
         return {"error": str(e)}
 
 # ======================================
-# FUNCTION: Transform table เป็น final DataFrame
+# FUNCTION: Transform table → final DataFrame
 # ======================================
-def transform_df(df_table):
+def transform_df_with_mapping(df_table):
     final_rows = []
     for _, row in df_table.iterrows():
-        for col in df_table.columns:
-            if col in ["COUNTRY_NAME", "SERVICE_TYPE"]:
-                continue
-            # ตรวจ numeric หรือ float
-            try:
-                rate = float(row[col])
-            except:
-                continue
-            final_rows.append({
-                "PROMOTION_TYPE": "normal",
-                "SERVICE_TYPE": row["SERVICE_TYPE"],
-                "CHARGE_CODE": col.replace(" ", "_").upper(),  # ใช้ชื่อ column เป็น code
-                "CHARGE_CODE_NAME": col,
-                "RATE": rate,
-                "COUNTRY_NAME": row["COUNTRY_NAME"],
-                "USER_DATE": datetime.now()
-            })
+        for col, (code, name) in charge_mapping.items():
+            if col in row and pd.notna(row[col]):
+                try:
+                    rate = float(row[col])
+                except:
+                    continue
+                final_rows.append({
+                    "PROMOTION_TYPE": "normal",
+                    "SERVICE_TYPE": row["SERVICE_TYPE"],
+                    "CHARGE_CODE": code,
+                    "CHARGE_CODE_NAME": name,
+                    "RATE": rate,
+                    "COUNTRY_NAME": row["COUNTRY_NAME"],
+                    "USER_DATE": datetime.now()
+                })
     return pd.DataFrame(final_rows)
 
 # ======================================
 # Streamlit Interface
 # ======================================
-st.subheader("🚀 AIS IR Rate Scraper (HTML)")
+st.subheader("🚀 AIS IR Rate Scraper (Mapped to CHARGE_CODE)")
 
 if st.button("▶️ Run Scraper Now"):
     all_rows = []
@@ -87,9 +89,7 @@ if st.button("▶️ Run Scraper Now"):
                 logs.append(f"❌ {c}-{p}: {df_table['error']}")
             else:
                 logs.append(f"✅ {c}-{p}")
-                st.subheader(f"Columns for {c}-{p}")
-                st.write(df_table.columns)  # แสดง column ของ table
-                final_df = transform_df(df_table)
+                final_df = transform_df_with_mapping(df_table)
                 all_rows.append(final_df)
 
     # แสดง log
