@@ -28,9 +28,13 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: 'Segoe UI', 'Roboto', sans-serif;
 }
+
+/* ===== BACKGROUND YELLOW ===== */
 .stApp {
     background: linear-gradient(to right, #fff9e6, #fff2cc);
 }
+
+/* ===== HEADER GREEN ===== */
 .header {
     display: flex;
     align-items: center;
@@ -44,6 +48,8 @@ html, body, [class*="css"] {
     font-weight: 800;
     color: white;
 }
+
+/* ===== STEP GREEN ===== */
 .step-box {
     display: flex;
     align-items: center;
@@ -56,6 +62,7 @@ html, body, [class*="css"] {
 .step {
     font-size: 34px;
     font-weight: 700;
+    color: white;
     width: 60px;
     height: 60px;
     display: flex;
@@ -71,6 +78,8 @@ html, body, [class*="css"] {
     font-weight: 600;
     color: #e0f2f1;
 }
+
+/* ===== CARD ===== */
 .metric-box {
     background: white;
     padding: 15px;
@@ -78,6 +87,8 @@ html, body, [class*="css"] {
     text-align: center;
     box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
 }
+
+/* ===== TABLE ===== */
 .dataframe {
     background-color: white;
 }
@@ -124,40 +135,30 @@ def rollback_master():
     shutil.copy(f"{BACKUP_FOLDER}/{latest}", MASTER_FILE)
     return True
 
-def prepare(df, rate_col_name, date=None):
+def prepare(df, rate_col_name):
     key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
     df = df.copy()
-    
     if "RATE" not in df.columns:
         st.error("❌ คอลัมน์ 'RATE' ไม่พบในไฟล์ Excel กรุณาตรวจสอบชื่อคอลัมน์")
         return None
-    
-    df["RATE_NUM"] = pd.to_numeric(df["RATE"], errors="coerce")
-    df = df[key_cols + ["RATE_NUM"]].drop_duplicates()
-    
-    if date is not None:
-        df[rate_col_name] = df["RATE_NUM"].apply(lambda x: f"{x} ({date})")
-    else:
-        df[rate_col_name] = df["RATE_NUM"]
-    
-    return df[key_cols + [rate_col_name, "RATE_NUM"]]
+    df["RATE"] = pd.to_numeric(df["RATE"], errors="coerce")
+    df = df[key_cols + ["RATE"]].drop_duplicates()
+    return df.rename(columns={"RATE": rate_col_name})
 
 def compare(df_master, df_new):
     key_cols = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE"]
-    df = pd.merge(df_master, df_new, on=key_cols, how="outer", suffixes=('_MASTER', '_NEW'))
-    
+    df = pd.merge(df_master, df_new, on=key_cols, how="outer")
     def get_status(row):
-        if pd.isna(row["RATE_NUM_MASTER"]):
+        if pd.isna(row["RATE_MASTER"]):
             return "NEW"
-        elif pd.isna(row["RATE_NUM_NEW"]):
+        elif pd.isna(row["RATE_NEW"]):
             return "REMOVED"
-        elif row["RATE_NUM_MASTER"] != row["RATE_NUM_NEW"]:
+        elif row["RATE_MASTER"] != row["RATE_NEW"]:
             return "CHANGED"
         else:
             return "SAME"
-    
     df["STATUS"] = df.apply(get_status, axis=1)
-    df["DIFF"] = df["RATE_NUM_NEW"].fillna(0) - df["RATE_NUM_MASTER"].fillna(0)
+    df["DIFF"] = df["RATE_NEW"] - df["RATE_MASTER"]
     return df.sort_values(key_cols)
 
 # ===== LOAD MASTER =====
@@ -196,12 +197,12 @@ file = st.file_uploader("", type=["xlsx"])
 # ===== MAIN =====
 if file:
     df_new_raw = pd.read_excel(file)
-    df_new = prepare(df_new_raw, "RATE_NEW", date=datetime.now(tz).strftime("%d %b %Y"))
+    df_new = prepare(df_new_raw, "RATE_NEW")
     if df_new is None:
         st.stop()
 
     if master_df is not None:
-        df_master = prepare(master_df.rename(columns={"RATE":"RATE_MASTER"}), "RATE_MASTER", date=master_time)
+        df_master = master_df.rename(columns={"RATE": "RATE_MASTER"})
         result = compare(df_master, df_new)
 
         # ===== SUMMARY =====
@@ -238,8 +239,7 @@ if file:
 
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            export_cols = ["COUNTRY_NAME","CHARGE_CODE","SERVICE_TYPE","RATE_MASTER","RATE_NEW","DIFF","STATUS"]
-            result.to_excel(writer, index=False, columns=export_cols)
+            result.to_excel(writer, index=False)
         st.download_button("📥 Download Excel", data=output.getvalue(), file_name="rate_compare.xlsx")
 
     else:
@@ -254,6 +254,6 @@ if file:
     """, unsafe_allow_html=True)
 
     if st.button("💾 Save as Master"):
-        master_save = df_new.rename(columns={"RATE_NEW":"RATE"})[["COUNTRY_NAME","CHARGE_CODE","SERVICE_TYPE","RATE"]]
+        master_save = df_new.rename(columns={"RATE_NEW": "RATE"})
         save_master(master_save)
         st.success("✅ Saved as Master (Backup created)")
