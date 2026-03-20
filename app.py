@@ -103,7 +103,7 @@ html, body, [class*="css"] {
 st.markdown(f"""
 <div class="header">
     <div class="main-title">🌍 AI-powered IR Rate / CGV</div>
-    <img src="ais_logo.png" class="logo">
+    <img src="plane_logo.png" class="logo">
 </div>
 """, unsafe_allow_html=True)
 
