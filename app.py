@@ -22,7 +22,7 @@ MASTER_META = "master_meta.txt"
 BACKUP_FOLDER = "master_backup"
 os.makedirs(BACKUP_FOLDER, exist_ok=True)
 
-# ===== CSS =====
+# ===== CSS + GIF =====
 st.markdown("""
 <style>
 html, body, [class*="css"] {
@@ -36,12 +36,14 @@ html, body, [class*="css"] {
 
 /* ===== HEADER GREEN ===== */
 .header {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: left;
     padding: 10px 40px;
     background-color: #047857;
     border-radius: 12px;
+    overflow: hidden;
 }
 .main-title {
     font-size: 42px;
@@ -62,7 +64,6 @@ html, body, [class*="css"] {
 .step {
     font-size: 34px;
     font-weight: 700;
-    color: white;
     width: 60px;
     height: 60px;
     display: flex;
@@ -92,13 +93,25 @@ html, body, [class*="css"] {
 .dataframe {
     background-color: white;
 }
-</style>
-""", unsafe_allow_html=True)
 
-# ===== HEADER =====
-st.markdown(f"""
+/* ===== PLANE GIF ===== */
+#plane {
+    position: absolute;
+    width: 50px;
+    top: -10px;
+    right: -50px;
+    animation: fly 8s linear infinite;
+}
+@keyframes fly {
+    0% { transform: translateX(0) rotate(0deg);}
+    50% { transform: translateX(-600px) translateY(20px) rotate(20deg);}
+    100% { transform: translateX(0) rotate(0deg);}
+}
+</style>
+
 <div class="header">
     <div class="main-title">🌍 AI-powered IR Rate / CGV</div>
+    <img id="plane" src="https://media.giphy.com/media/26tPplGWjN0xLybiU/giphy.gif">
 </div>
 """, unsafe_allow_html=True)
 
