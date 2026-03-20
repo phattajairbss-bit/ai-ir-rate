@@ -4,7 +4,7 @@ import requests
 import re
 from datetime import datetime
 
-st.title("🔥 AIS IR Rate Scraper (Regex HTML Text)")
+st.title("🔥 AIS IR Rate Scraper (HTML + Regex Multi-line)")
 
 # ======================================
 # CONFIG
@@ -24,7 +24,7 @@ plan_mapping = {
     "prepaid": "sms_ir"
 }
 
-# CHARGE CODE mapping
+# Charge code mapping
 charge_mapping = {
     "LOCAL_CALL": ("400001021", "C_IR_MOC_VISIT"),
     "CALL_THAI": ("400001019", "C_IR_MOC_THAI"),
@@ -46,14 +46,14 @@ def scrape_rates(country_slug, plan):
 
         text = res.text
 
-        # regex patterns for rates
+        # Regex patterns for multi-line rates
         patterns = {
-            "LOCAL_CALL": r"Local Call\s+([\d.]+)",
-            "CALL_THAI": r"Call to Thai\s+([\d.]+)",
-            "GLOBAL_CALL": r"Global call\s+([\d.]+)",
-            "RECEIVING": r"Receiving calls\s+([\d.]+)",
-            "SMS": r"SMS Roaming\s+([\d.]+)",
-            "DATA": r"Data roaming\s+([\d.]+)"
+            "LOCAL_CALL": r"Local Call\s*\n\s*([\d.]+)",
+            "CALL_THAI": r"Call to Thai\s*\n\s*([\d.]+)",
+            "GLOBAL_CALL": r"Global call\s*\n\s*([\d.]+)",
+            "RECEIVING": r"Receiving calls\s*\n\s*([\d.]+)",
+            "SMS": r"SMS Roaming\s*\n\s*([\d.]+)",
+            "DATA": r"Data roaming\s*\n\s*([\d.]+)"
         }
 
         rates = {}
@@ -65,7 +65,7 @@ def scrape_rates(country_slug, plan):
         if not rates:
             return {"error": "No rates found"}
 
-        # add meta
+        # Add meta info
         rates["COUNTRY_NAME"] = country_slug.upper()
         rates["SERVICE_TYPE"] = plan_mapping.get(plan, plan)
 
@@ -75,9 +75,9 @@ def scrape_rates(country_slug, plan):
         return {"error": str(e)}
 
 # ======================================
-# Streamlit Interface
+# STREAMLIT INTERFACE
 # ======================================
-st.subheader("🚀 AIS IR Rate Scraper (Regex HTML Text)")
+st.subheader("🚀 AIS IR Rate Scraper")
 
 if st.button("▶️ Run Scraper Now"):
 
@@ -92,7 +92,7 @@ if st.button("▶️ Run Scraper Now"):
                 logs.append(f"❌ {c}-{p}: {result['error']}")
             else:
                 logs.append(f"✅ {c}-{p}")
-                # transform to charge_code format
+                # Transform to CHARGE_CODE format
                 for rate_type, (code, name) in charge_mapping.items():
                     if rate_type in result:
                         all_rows.append({
@@ -126,5 +126,6 @@ if st.button("▶️ Run Scraper Now"):
         )
     else:
         st.error("❌ ยังไม่ได้ data")
+
 else:
     st.info("💡 กดปุ่ม 'Run Scraper Now' เพื่ออัปเดตข้อมูลล่าสุด")
