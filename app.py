@@ -5,7 +5,6 @@ import os
 from datetime import datetime
 import pytz
 import shutil
-import plotly.express as px
 
 st.set_page_config(
     page_title="CGV Rate IR Compare Dashboard",
@@ -13,15 +12,14 @@ st.set_page_config(
     page_icon="🌍"
 )
 
-# ===== SESSION STATE =====
+# ===== SESSION =====
 if "dark_mode" not in st.session_state:
     st.session_state.dark_mode = False
 
-# ===== THEME TOGGLE =====
 toggle = st.toggle("🌙 Dark Mode", value=st.session_state.dark_mode)
 st.session_state.dark_mode = toggle
 
-# ===== CSS =====
+# ===== THEME =====
 if st.session_state.dark_mode:
     bg = "#0f172a"
     card = "#1e293b"
@@ -110,7 +108,7 @@ def rollback_master():
     shutil.copy(f"{BACKUP_FOLDER}/{files[0]}", MASTER_FILE)
     return True
 
-# ===== VALIDATION =====
+# ===== VALIDATE =====
 def validate(df):
     required = ["COUNTRY_NAME", "CHARGE_CODE", "SERVICE_TYPE", "RATE"]
     missing = [c for c in required if c not in df.columns]
@@ -142,12 +140,12 @@ def compare(m, n):
 master_df = load_master()
 master_time = get_master_time()
 
-# ===== MASTER SECTION =====
+# ===== MASTER =====
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("💾 Master Data")
 st.caption(f"Last updated: {master_time}")
 
-col1, col2 = st.columns([1,1])
+col1, col2 = st.columns(2)
 if col1.button("🔁 Rollback"):
     if rollback_master():
         st.success("Rollback success")
@@ -168,7 +166,6 @@ st.markdown('</div>', unsafe_allow_html=True)
 if file:
     df_raw = pd.read_excel(file)
 
-    # VALIDATION
     if not validate(df_raw):
         st.stop()
 
@@ -197,27 +194,35 @@ if file:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("📊 Summary")
 
-        col1, col2, col3, col4 = st.columns(4)
-        col1.markdown(f'<div class="metric green"><h2>{(result.STATUS=="NEW").sum()}</h2>NEW</div>', unsafe_allow_html=True)
-        col2.markdown(f'<div class="metric red"><h2>{(result.STATUS=="CHANGED").sum()}</h2>CHANGED</div>', unsafe_allow_html=True)
-        col3.markdown(f'<div class="metric orange"><h2>{(result.STATUS=="REMOVED").sum()}</h2>REMOVED</div>', unsafe_allow_html=True)
-        col4.markdown(f'<div class="metric gray"><h2>{(result.STATUS=="SAME").sum()}</h2>SAME</div>', unsafe_allow_html=True)
+        total_country = result["COUNTRY_NAME"].nunique()
+
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        col1.markdown(f'<div class="metric gray"><h2>{total_country}</h2>Total Countries</div>', unsafe_allow_html=True)
+        col2.markdown(f'<div class="metric green"><h2>{(result.STATUS=="NEW").sum()}</h2>NEW</div>', unsafe_allow_html=True)
+        col3.markdown(f'<div class="metric red"><h2>{(result.STATUS=="CHANGED").sum()}</h2>CHANGED</div>', unsafe_allow_html=True)
+        col4.markdown(f'<div class="metric orange"><h2>{(result.STATUS=="REMOVED").sum()}</h2>REMOVED</div>', unsafe_allow_html=True)
+        col5.markdown(f'<div class="metric gray"><h2>{(result.STATUS=="SAME").sum()}</h2>SAME</div>', unsafe_allow_html=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # ===== CHART =====
+        # ===== TOP COUNTRY =====
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("📈 Difference Chart")
+        st.subheader("🔥 Top Countries with Most Changes")
 
-        chart_df = result[result["STATUS"]=="CHANGED"].copy()
-        if not chart_df.empty:
-            fig = px.bar(chart_df.head(20),
-                         x="CHARGE_CODE",
-                         y="DIFF",
-                         color="COUNTRY_NAME")
-            st.plotly_chart(fig, use_container_width=True)
+        top_country = (
+            result[result["STATUS"]=="CHANGED"]
+            .groupby("COUNTRY_NAME")
+            .size()
+            .reset_index(name="CHANGE_COUNT")
+            .sort_values("CHANGE_COUNT", ascending=False)
+            .head(10)
+        )
+
+        if not top_country.empty:
+            st.dataframe(top_country, use_container_width=True)
         else:
-            st.info("No changed data")
+            st.info("No changed countries")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -232,7 +237,6 @@ if file:
         else:
             display = result
 
-        # HIGHLIGHT
         def highlight(row):
             if row["STATUS"] == "CHANGED":
                 return ["background-color:#fee2e2"]*len(row)
@@ -244,7 +248,6 @@ if file:
 
         st.dataframe(display.style.apply(highlight, axis=1), use_container_width=True)
 
-        # DOWNLOAD
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             result.to_excel(writer, index=False)
